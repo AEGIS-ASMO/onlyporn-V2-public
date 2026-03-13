@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const landingTemplate = require('stremio-addon-sdk/src/landingTemplate');
 const getRouter = require('stremio-addon-sdk/src/getRouter');
-const open = require('open');
 const requestIp = require('request-ip');
 const qs = require('qs');
 const { track } = require('../analytics');
