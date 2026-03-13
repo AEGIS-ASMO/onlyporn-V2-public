@@ -79,11 +79,43 @@ class XhamsterProvider extends Provider {
   }
 
   parseVideoPage({ id, html }) {
-    const regex = /window.initials=\{(.*)\};/;
-    let match = html.match(regex);
-    if (match && match[1]) {
-      match = '{' + match[1] + '}';
+    let streamUrl = null;
+
+// new JSON structure
+const jsonRegex = /window\.initials\s*=\s*({.*});/;
+const jsonMatch = html.match(jsonRegex);
+
+if (jsonMatch && jsonMatch[1]) {
+  try {
+    const data = JSON.parse(jsonMatch[1]);
+
+    const files = data?.videoModel?.sources?.mp4;
+
+    if (files) {
+      const qualities = Object.keys(files);
+
+      if (qualities.length) {
+        streamUrl = files[qualities[0]];
+      }
     }
+  } catch (e) {
+    logger.error({ e }, 'xhamster json parse failed');
+  }
+}
+
+// fallback older format
+if (!streamUrl) {
+  const regex2 = /https?:\/\/[^"]+\.mp4/;
+  const match2 = html.match(regex2);
+
+  if (match2 && match2[0]) {
+    streamUrl = match2[0];
+  }
+}
+
+if (!streamUrl) {
+  return null;
+}
 
     const json = JSON.parse(match);
     const { av1, h264 } = json.xplayerSettings.sources.hls;
