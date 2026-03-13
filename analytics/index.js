@@ -1,7 +1,7 @@
 require('dotenv').config()
 const { Analytics } = require('@segment/analytics-node');
 const event = require('./event');
-const package = require('../package.json');
+const packageInfo = require('../package.json');
 const { getActiveProvider } = require('../catalog');
 const geoip = require('fast-geoip');
 const ip = require("ip");
@@ -9,7 +9,7 @@ const { version } = require('../package.json');
 
 const analytics = new Analytics({ writeKey: process.env.WRITE_KEY });
 
-function track(event, properties) {
+function track(eventName, properties) {
     (async () => {
         let geo = {};
         try {
@@ -24,14 +24,13 @@ function track(event, properties) {
 
         analytics.track({
             anonymousId: Math.random().toString(16).replace('0.', ''),
-            event,
+            event: eventName,
             properties: {
                 ...properties,
                 metaId: properties.id,
-                version: package.version,
+                version: packageInfo.version,
                 provider: getActiveProvider(properties.id),
-                geo,
-                version
+                geo
             }
         })
     })()
