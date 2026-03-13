@@ -31,19 +31,28 @@ const builder = new addonBuilder(manifest);
 builder.defineCatalogHandler(function (args, cb) {
   return loadProvider(args.id)
     .handleCatalog(args)
-    .catch((reason) => console.error(reason));
+    .catch(err => {
+  console.error(err)
+  return { metas: [] }
+});
 });
 
 builder.defineStreamHandler(function (args) {
   return loadProvider(args.id)
     .handleStream(args)
-    .catch((reason) => console.error(reason));
+    .catch(err => {
+  console.error(err)
+  return { streams: [] }
+});
 });
 
 builder.defineMetaHandler(function (args) {
   return loadProvider(args.id)
     .handleMeta(args)
-    .catch((reason) => console.error(reason));
+    .catch(err => {
+  console.error(err)
+  return { meta: {} }
+});
 });
 
 console.info({ version: manifest.version });
