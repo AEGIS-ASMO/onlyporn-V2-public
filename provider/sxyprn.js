@@ -1,4 +1,5 @@
 require('dotenv').config();
+
 const { load } = require('cheerio');
 const logger = require('../logger');
 const { meta } = require('../model');
@@ -12,6 +13,7 @@ const sortByMappings = {
 };
 
 class SxyprnProvider extends Provider {
+
   constructor() {
     super('https://www.sxyprn.com', 'sxyprn', 25);
   }
@@ -20,138 +22,159 @@ class SxyprnProvider extends Provider {
     return new SxyprnProvider();
   }
 
-  getInitialUrl(catalogId) {
-    return this.baseUrl
+  getInitialUrl() {
+    return this.baseUrl;
   }
 
   handleSearch({ extra: { search: keyword } }) {
     return `${this.baseUrl}/${encodeURIComponent(keyword)}.html`;
   }
 
-  handleGenre({ id, extra: { genre } }) {
+  handleGenre({ extra: { genre } }) {
+
     if (genre.includes('/cat')) {
       return `${this.baseUrl}${genre}`;
     }
+
     let [category, sortBy] = genre.split('(');
-    category = category.trim().replace(' ', '-').trim();
-    sortBy = sortByMappings[sortBy.replace(')', '')];
-    return `${this.baseUrl}/${category}.html?sm=${sortBy.toLowerCase()}`;
+
+    category = category.trim().replace(/\s+/g, '-');
+
+    sortBy = sortByMappings[(sortBy || '').replace(')', '')] || 'latest';
+
+    return `${this.baseUrl}/${category}.html?sm=${sortBy}`;
   }
 
-  handlePagination(url, { extra: { genre, skip } }) {
-    const limit = 30;
-    if (genre) {
-      return `&page=${limit * this.page(skip)}`
+  handlePagination(url, { extra: { skip } }) {
+
+    const page = this.page(skip);
+
+    if (url.includes('?')) {
+      return `${url}&page=${page}`;
     }
-    if (url === this.baseUrl) {
-      return `/orgasm/${limit * this.page(skip)}`;
-    }
-    const prefix = url.endsWith('/') ? '' : '/';
-    return `${prefix}${this.page(skip)}`;
+
+    return `${url}?page=${page}`;
   }
 
   getCatalogMetas(html) {
+
     const metadataList = [];
+
     const $ = load(html);
 
-    $('div.post_el_small').each((_, element) => {
-      const $e = $(element);
-      const title = $e.children('.post_text').text();
-      const poster = 'https:' + $e.find('img').first().attr('data-src');
-      const path = $e.find('.js-pop').first().attr('href');
-      const videoPageUrl = this.baseUrl + path;
+    $('.post_el_small, .thumb').each((_, element) => {
 
-      if (path) {
-        metadataList.push(
-          new meta.MetaPreview(
-            videoPageUrl,
-            'movie',
-            title,
-            poster,
-            {
-              videoPageUrl,
-            }
-          )
-        );
-      }
+      const $e = $(element);
+
+      const title =
+        $e.find('.post_text').text().trim() ||
+        $e.find('img').attr('alt');
+
+      const img = $e.find('img').first();
+
+      const poster =
+        img.attr('data-src') ||
+        img.attr('data-original') ||
+        img.attr('src');
+
+      const path =
+        $e.find('a.js-pop').attr('href') ||
+        $e.find('a').first().attr('href');
+
+      if (!path) return;
+
+      const videoPageUrl = path.startsWith('http')
+        ? path
+        : this.baseUrl + path;
+
+      metadataList.push(
+        new meta.MetaPreview(
+          videoPageUrl,
+          'movie',
+          title,
+          poster?.startsWith('http') ? poster : 'https:' + poster,
+          { videoPageUrl },
+        ),
+      );
     });
 
     return metadataList;
   }
 
   async getMetadata(args) {
+
     logger.debug({ args }, 'getMetadata');
+
     const { id } = args;
-    return this.fetchHtml(id).then((html) => this.parseVideoPage({ id, html }));
-  }
 
-  getvsrc(html) {
-    const $ = load(html);
-    if ($('.vidsnfo').length) {
-      var vidsnfo = $('.vidsnfo').data('vnfo');
-      for (const [pid, src] of Object.entries(vidsnfo)) {
-        var tmp = src.split("/");
-        tmp[1] += "8";
-        tmp = this.preda(tmp);
-        return tmp.join("/");
-      }
-    }
-    return null;
-  }
-
-  preda(arg) {
-    arg[5] -= parseInt(this.ssut51(arg[6])) + parseInt(this.ssut51(arg[7]));
-    return arg;
-  }
-
-  ssut51(arg) {
-    var str = arg.replace(/[^0-9]/g, '');
-    var sut = 0;
-    for (var i = 0; i < str.length; i++) {
-      sut += parseInt(str.charAt(i), 10);
-    }
-    return sut;
+    return this.fetchHtml(id)
+      .then(html => this.parseVideoPage({ id, html }));
   }
 
   parseVideoPage({ id, html }) {
-    const $ = load(html);
-    let videoPageUrl = null;
-    const $metas = $('meta');
-    let metaMap = {};
-    $metas.each((i, e) => {
-      const attribs = e.attribs;
-      metaMap[attribs.name || attribs.property] = attribs.content;
-    });
-    const poster = 'https:' + metaMap['og:image'];
-    const description = metaMap['og:description'];
-    const vidSrc = this.getvsrc(html);
 
-    if (vidSrc) {
-      videoPageUrl = this.baseUrl + vidSrc;
+    const $ = load(html);
+
+    const title =
+      $('meta[property="og:title"]').attr('content');
+
+    const poster =
+      'https:' + $('meta[property="og:image"]').attr('content');
+
+    const description =
+      $('meta[property="og:description"]').attr('content');
+
+    let videoUrl = null;
+
+    const videoTag = $('video source').attr('src');
+
+    if (videoTag) {
+      videoUrl = videoTag.startsWith('http')
+        ? videoTag
+        : 'https:' + videoTag;
+    }
+
+    if (!videoUrl) {
+
+      const scripts = $('script')
+        .map((i, el) => $(el).html())
+        .get()
+        .join('\n');
+
+      const regex = /(https?:\/\/[^"]+\.mp4)/;
+
+      const match = scripts.match(regex);
+
+      if (match) videoUrl = match[1];
     }
 
     return new meta.MetaResponse(
       id,
       Provider.TYPE,
-      metaMap['og:title'],
+      title,
       {
         description,
         poster,
         background: poster,
-        videoPageUrl
-      }
+        videoPageUrl: videoUrl,
+      },
     );
   }
 
   async getStreams(meta) {
+
+    if (!meta.videoPageUrl) {
+      return { streams: [] };
+    }
+
     return {
       streams: [
         {
           type: Provider.TYPE,
           url: meta.videoPageUrl,
-          name: 'OnlyPorn HD'
-        }
-      ]
+          name: 'OnlyPorn HD',
+        },
+      ],
     };
   }
 }
