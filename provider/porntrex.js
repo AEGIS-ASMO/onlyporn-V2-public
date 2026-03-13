@@ -114,54 +114,74 @@ class PorntrexProvider extends Provider {
   }
 
   parseVideoPage({ id, html }) {
-    const regex = /var flashvars = (\{[^;]*\});/;
-    let match = html.match(regex);
-    if (match && match[1]) {
-      const {
-        video_title,
-        video_categories,
-        preview_url,
-        video_alt_url5,
-        video_alt_url4,
-        video_alt_url3,
-        video_alt_url2,
-        video_alt_url,
-        video_alt_url5_text,
-        video_alt_url4_text,
-        video_alt_url3_text,
-        video_alt_url2_text,
-        video_alt_url_text,
-      } = JSON.parse(this.fixLooseJson(match[1]
-        .replace('var flashvars =', '')
-        .replaceAll('https://', '')
-        .replace(';', '')
-        .trim()));
-      const metaResponse = new meta.MetaResponse(
-        id,
-        'movie',
-        video_title,
-        {
-          genres: video_categories.split(','),
-          background: 'https:' + preview_url,
-          description: video_title,
-        },
-      );
-      return {
-        metaResponse,
-        video_alt_url5,
-        video_alt_url4,
-        video_alt_url3,
-        video_alt_url2,
-        video_alt_url,
-        video_alt_url5_text,
-        video_alt_url4_text,
-        video_alt_url3_text,
-        video_alt_url2_text,
-        video_alt_url_text,
-      };
+  const regexFlashvars = /var flashvars = (\{[^;]*\});/;
+  let match = html.match(regexFlashvars);
+
+  let data = null;
+
+  if (match && match[1]) {
+    try {
+      data = JSON.parse(this.fixLooseJson(
+        match[1]
+          .replace('var flashvars =', '')
+          .replaceAll('https://', '')
+          .replace(';', '')
+          .trim()
+      ));
+    } catch (e) {
+      logger.error({ e }, 'flashvars parse failed');
     }
-    return {};
   }
+
+  if (!data) {
+    const regexSources = /"sources":\s*(\[[^\]]+\])/;
+    const srcMatch = html.match(regexSources);
+
+    if (srcMatch && srcMatch[1]) {
+      try {
+        const sources = JSON.parse(srcMatch[1]);
+        data = {
+          video_title: 'Porntrex Video',
+          preview_url: '',
+          video_categories: '',
+        };
+
+        sources.forEach((src, i) => {
+          data[`video_alt_url${i}`] = src.file.replace('https://', '');
+          data[`video_alt_url${i}_text`] = src.label || 'HD';
+        });
+
+      } catch (e) {
+        logger.error({ e }, 'sources parse failed');
+      }
+    }
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const {
+    video_title,
+    video_categories,
+    preview_url,
+  } = data;
+
+  const metaResponse = new meta.MetaResponse(
+    id,
+    'movie',
+    video_title,
+    {
+      genres: video_categories ? video_categories.split(',') : [],
+      background: preview_url ? 'https:' + preview_url : '',
+      description: video_title,
+    }
+  );
+
+  return {
+    metaResponse,
+    ...data,
+  };
 }
 
 module.exports = PorntrexProvider.create;
