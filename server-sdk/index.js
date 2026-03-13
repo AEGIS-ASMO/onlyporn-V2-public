@@ -5,7 +5,6 @@ const landingTemplate = require('stremio-addon-sdk/src/landingTemplate');
 const getRouter = require('stremio-addon-sdk/src/getRouter');
 const requestIp = require('request-ip');
 const qs = require('qs');
-const { track } = require('../analytics');
 const { addonEnabled } = require('../catalog');
 
 function serveHTTP(addonInterface, opts = {}) {
