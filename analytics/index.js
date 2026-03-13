@@ -1,44 +1,10 @@
-require('dotenv').config()
-const { Analytics } = require('@segment/analytics-node');
-const event = require('./event');
-const packageInfo = require('../package.json');
-const { getActiveProvider } = require('../catalog');
-const geoip = require('fast-geoip');
-const ip = require("ip");
-const { version } = require('../package.json');
+let analytics = null
 
-const analytics = new Analytics({ writeKey: process.env.WRITE_KEY });
-
-if (!process.env.SEGMENT_KEY) return;
-
-function track(eventName, properties) {
-    (async () => {
-        let geo = {};
-        try {
-            properties.clientIp = properties.clientIp || ip.address();
-            if (properties.clientIp) {
-                geo = await geoip.lookup(properties.clientIp);
-            }
-        } catch (err) {
-            geo = {};
-            console.warn(err);
-        }
-
-        analytics.track({
-            anonymousId: Math.random().toString(16).replace('0.', ''),
-            event: eventName,
-            properties: {
-                ...properties,
-                metaId: properties.id,
-                version: packageInfo.version,
-                provider: getActiveProvider(properties.id),
-                geo
-            }
-        })
-    })()
+if (process.env.SEGMENT_WRITE_KEY) {
+  const { Analytics } = require('@segment/analytics-node')
+  analytics = new Analytics({
+    writeKey: process.env.SEGMENT_WRITE_KEY
+  })
 }
 
-module.exports = {
-    event,
-    track
-};
+module.exports = analytics
