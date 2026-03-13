@@ -9,6 +9,8 @@ const { version } = require('../package.json');
 
 const analytics = new Analytics({ writeKey: process.env.WRITE_KEY });
 
+if (!process.env.SEGMENT_KEY) return;
+
 function track(eventName, properties) {
     (async () => {
         let geo = {};
