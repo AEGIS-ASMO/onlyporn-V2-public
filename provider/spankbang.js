@@ -20,152 +20,158 @@ class SpankbangProvider extends Provider {
     return new SpankbangProvider();
   }
 
-  getInitialUrl(catalogId) {
+  getInitialUrl() {
     return this.baseUrl + pathMappings.Trending;
   }
 
   handleSearch({ extra: { search: keyword } }) {
-    return `${this.baseUrl}/s/${keyword}/`;
+    return `${this.baseUrl}/s/${encodeURIComponent(keyword)}/`;
   }
+
   async fetchHtml(url) {
     logger.info({ url }, 'fetching url');
+
     try {
       const response = await fetch(url, {
-        "headers": {
-          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-          "accept-language": "en-US,en;q=0.9",
-          "priority": "u=0, i",
-          "sec-ch-ua": "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\"",
-          "sec-ch-ua-mobile": "?0",
-          "sec-ch-ua-platform": "\"macOS\"",
-          "sec-fetch-dest": "document",
-          "sec-fetch-mode": "navigate",
-          "sec-fetch-site": "same-origin",
-          "sec-fetch-user": "?1",
-          "upgrade-insecure-requests": "1"
+        headers: {
+          'accept': 'text/html',
+          'accept-language': 'en-US,en;q=0.9',
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
         },
-        "referrer": "https://spankbang.com/9hj5s/video/teen+with+big+natural+tits+was+fucked+in+the+forest+in+doggy+position",
-        "referrerPolicy": "strict-origin-when-cross-origin",
-        "body": null,
-        "method": "GET",
-        "mode": "cors",
-        "credentials": "include"
       });
-      const r = await response.text();
-      return r;
+
+      return await response.text();
     } catch (error) {
-      console.error(error.message);
+      logger.error(error);
       return '';
     }
   }
 
   handleGenre({ extra: { genre } }) {
+
     const [keyword, order] = genre.split('(');
+
     if (order) {
-      const searchUrl = this.handleSearch({ extra: { search: encodeURIComponent(keyword.trim()) } });
+      const searchUrl = this.handleSearch({
+        extra: { search: keyword.trim() },
+      });
+
       return searchUrl + `?o=${order.replace(')', '').toLowerCase()}`;
     }
 
     const path = pathMappings[keyword] || pathMappings.New;
+
     return `${this.baseUrl}${path}`;
   }
 
   handlePagination(url, { extra: { skip } }) {
-    const prefix = url.lastIndexOf('/') === 7 ? '/' : '';
-    return `${prefix}${this.page(skip)}/`;
+    const page = this.page(skip);
+    return `${url.replace(/\/$/, '')}/${page}/`;
   }
 
   getCatalogMetas(html) {
+
     const metadataList = [];
     const $ = load(html);
 
-    $('div.video-item')
-      .each((index, element) => {
-        const $e = $(element);
-        const id = $e.attr('data-id');
-        const $children = $e.children();
-        const $first = $children.first();
-        const $imgNode = $first.children().children('img');
-        const poster = $imgNode.attr('data-src');
-        const title = $imgNode.attr('alt');
-        const videoPageUrl = this.baseUrl + $first.attr('href');
+    $('div.video-item').each((index, element) => {
 
-        if (id) {
-          metadataList.push(new meta.MetaPreview(videoPageUrl, 'movie', title, poster, {
-            videoPageUrl,
-          }));
-        }
-      });
+      const $e = $(element);
+
+      const id = $e.attr('data-id');
+
+      const $first = $e.children().first();
+
+      const $imgNode = $first.find('img');
+
+      const poster =
+        $imgNode.attr('data-src') ||
+        $imgNode.attr('src') ||
+        $imgNode.attr('data-preview');
+
+      const title = $imgNode.attr('alt');
+
+      const videoPageUrl = this.baseUrl + $first.attr('href');
+
+      if (!id || !title) return;
+
+      metadataList.push(
+        new meta.MetaPreview(
+          videoPageUrl,
+          'movie',
+          title,
+          poster,
+          { videoPageUrl },
+        ),
+      );
+    });
 
     return metadataList;
   }
 
   async getMetadata(args) {
+
     logger.debug({ args }, 'getMetadata');
+
     const { id } = args;
+
     return this.fetchHtml(id)
       .then(html => this.parseVideoPage({ id, html }))
       .catch((error) => {
         logger.error({ error, args }, 'getMetadata error');
         throw error;
-      })
-  }
-
-  parseVideoPage({ id, html }) {
-    const $ = load(html);
-    const $scripts = $('script');
-    const STREAM_DATA = 'stream_data';
-    const VIDEO_OBJECT = 'VideoObject';
-    const datas = $scripts.filter((i, e) => e.children.length !== 0)
-      .map((i, e) => e.children[0].data)
-      .filter((i, data) => {
-        return data.indexOf(STREAM_DATA) !== -1
-          || data.indexOf(VIDEO_OBJECT) !== -1;
       });
-    const url = $('meta[property="og:url"]')[0].attribs.content;
-    let streamUrl = null;
-
-const regex1 = /'m3u8':\s*\['([^']+)'/;
-let match = datas[0].match(regex1);
-
-if (match && match[1]) {
-  streamUrl = match[1];
-}
-
-if (!streamUrl) {
-  const regex2 = /https?:\/\/[^"]+\.m3u8/;
-  const m2 = html.match(regex2);
-  if (m2 && m2[0]) {
-    streamUrl = m2[0];
   }
-}
-    const {
-      name,
-      thumbnailUrl,
-      description,
-      keywords,
-    } = JSON.parse(datas[1].replace(/[\r\n\t]/g, ''));
+
+  parseVideoPage({ html }) {
+
+    const $ = load(html);
+
+    const url = $('meta[property="og:url"]').attr('content');
+
+    const title = $('meta[property="og:title"]').attr('content');
+
+    const poster = $('meta[property="og:image"]').attr('content');
+
+    const description =
+      $('meta[property="og:description"]').attr('content') || title;
+
+    const scripts = $('script')
+      .map((i, el) => $(el).html())
+      .get()
+      .join('\n');
+
+    const regex = /stream_data\s*=\s*(\{[^;]+\})/;
+
+    const match = scripts.match(regex);
+
+    if (!match) {
+      return {};
+    }
+
+    const streamsData = JSON.parse(match[1]);
+
+    const streams = Object.entries(streamsData).map(([quality, url]) => ({
+      name: quality,
+      url,
+      type: Provider.TYPE,
+    }));
+
+    logger.debug({ streams }, 'streams %d', streams.length);
 
     return new meta.MetaResponse(
       url,
       'movie',
-      name,
+      title,
       {
-        videoPageUrl: streamUrl,
-        poster: thumbnailUrl,
-        genres: keywords.split(','),
-        background: thumbnailUrl,
+        streams,
+        poster,
+        background: poster,
         description,
       },
     );
   }
 }
-
-const prov = new SpankbangProvider();
-// prov.handleCatalog({type: 'movie', extra: {}})
-// prov.handleStream({
-//     type: 'movie',
-//     id: '/9gj7a/video/blacked+anal+hungry+gabbie+carter+craves+anton+s+huge+bbc'
-// })
 
 module.exports = SpankbangProvider.create;
