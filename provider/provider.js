@@ -1,7 +1,6 @@
 const axios = require('axios');
 const m3u8 = require('m3u8-parser');
 const logger = require('../logger');
-const { event, track } = require('../analytics');
 
 class Provider {
   static LIMIT = 50;
