@@ -123,11 +123,22 @@ class SpankbangProvider extends Provider {
           || data.indexOf(VIDEO_OBJECT) !== -1;
       });
     const url = $('meta[property="og:url"]')[0].attribs.content;
-    const regex = /'m3u8':\s*\['([^\]]+)'\],/;
-    let match = datas[0].match(regex);
-    if (match && match[1]) {
-      match = match[1];
-    }
+    let streamUrl = null;
+
+const regex1 = /'m3u8':\s*\['([^']+)'/;
+let match = datas[0].match(regex1);
+
+if (match && match[1]) {
+  streamUrl = match[1];
+}
+
+if (!streamUrl) {
+  const regex2 = /https?:\/\/[^"]+\.m3u8/;
+  const m2 = html.match(regex2);
+  if (m2 && m2[0]) {
+    streamUrl = m2[0];
+  }
+}
     const {
       name,
       thumbnailUrl,
@@ -140,7 +151,7 @@ class SpankbangProvider extends Provider {
       'movie',
       name,
       {
-        videoPageUrl: match,
+        videoPageUrl: streamUrl,
         poster: thumbnailUrl,
         genres: keywords.split(','),
         background: thumbnailUrl,
