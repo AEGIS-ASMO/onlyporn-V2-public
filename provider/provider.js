@@ -87,7 +87,6 @@ class Provider {
 
   async handleCatalog(args) {
     if (args.type === Provider.TYPE && this.activate(args.id)) {
-      this.track(this.getAnalyticEvent(event.CATALOG, args.id), args);
       logger.info({ args }, 'handleCatalog');
 
       let url = this.getInitialUrl(args.id);
@@ -119,7 +118,6 @@ class Provider {
 
   async handleMeta(args) {
     if (args.type === Provider.TYPE && this.activate(args.id)) {
-      this.track(this.getAnalyticEvent(event.METADATA), args);
 
       return this.getMetadata(args).then(meta => {
         return { meta };
@@ -143,7 +141,6 @@ class Provider {
     const { id } = args;
 
     if (args.type === Provider.TYPE && this.activate(id)) {
-      this.track(this.getAnalyticEvent(event.STREAM), args);
 
       logger.info({ args }, 'handleStream');
 
