@@ -35,7 +35,11 @@ class Provider {
         timeout: 15000,
       });
 
-      return response.data;
+      if (typeof response.data === "string") {
+  return response.data;
+}
+
+return JSON.stringify(response.data);
     } catch (error) {
       console.error(error);
       return '';
