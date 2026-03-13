@@ -109,37 +109,47 @@ class Provider {
   }
 
   parseM3u8(content) {
-    const streams = [];
-
+  try {
     const parser = new m3u8.Parser();
     parser.push(content);
     parser.end();
 
-    try {
-      parser.manifest.playlists.forEach(playlist => {
-        streams.push({
-          url: playlist.uri,
-          resolution: playlist.attributes.RESOLUTION.height + 'p',
-        });
-      });
+    const manifest = parser.manifest;
 
-      streams.sort(
-        (a, b) =>
-          parseInt(b.resolution) - parseInt(a.resolution)
-      );
-
-      return streams.map(stream => {
-        return {
-          type: 'movie',
-          name: this.name + ' ' + stream.resolution,
-          url: stream.url,
-        };
-      });
-    } catch (err) {
-      logger.error(err);
-      return [];
+    if (!manifest.playlists || manifest.playlists.length === 0) {
+      return [{
+        type: "movie",
+        name: this.name + " stream",
+        url: "",
+      }];
     }
+
+    const streams = manifest.playlists.map(p => ({
+      url: p.uri,
+      resolution:
+        p.attributes &&
+        p.attributes.RESOLUTION
+          ? p.attributes.RESOLUTION.height + "p"
+          : "auto"
+    }));
+
+    streams.sort((a, b) => {
+      const ra = parseInt(a.resolution) || 0;
+      const rb = parseInt(b.resolution) || 0;
+      return rb - ra;
+    });
+
+    return streams.map(stream => ({
+      type: "movie",
+      name: `${this.name} ${stream.resolution}`,
+      url: stream.url
+    }));
+
+  } catch (err) {
+    console.error("parseM3u8 error", err);
+    return [];
   }
+}
 
   transformStream(url, stream) {
     return {
