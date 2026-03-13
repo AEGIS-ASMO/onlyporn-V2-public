@@ -5,8 +5,6 @@ const logger = require('../logger');
 class Provider {
   static LIMIT = 50;
   static TYPE = 'movie';
-
-  // removed external transport dependency
   static TRANSPORT_URL = '';
 
   constructor(baseUrl, name, limit) {
@@ -23,7 +21,7 @@ class Provider {
     return catalogId.indexOf(this.getName()) !== -1;
   }
 
-  getInitialUrl(catalogId) {
+  getInitialUrl() {
     return this.baseUrl;
   }
 
@@ -31,62 +29,120 @@ class Provider {
     return new Provider('', 'default');
   }
 
+  normalizeUrl(url) {
+    if (!url) return '';
+
+    if (url.startsWith('http')) {
+      return url;
+    }
+
+    if (url.startsWith('/')) {
+      return this.baseUrl + url;
+    }
+
+    return `${this.baseUrl}/${url}`;
+  }
+
   async fetchHtml(url) {
-    console.info('fetching url', url);
+    const finalUrl = this.normalizeUrl(url);
+
+    console.info('fetching url', finalUrl);
+
     try {
-      const response = await axios.get(url, {
+      const response = await axios.get(finalUrl, {
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          Connection: 'keep-alive',
           Referer: this.baseUrl,
         },
-        timeout: 15000,
+        timeout: 20000,
       });
 
       return response.data;
     } catch (error) {
-      console.error(error);
+      logger.error(error);
       return '';
+    }
+  }
+
+  async fetchJson(url) {
+    const finalUrl = this.normalizeUrl(url);
+
+    try {
+      const response = await axios.get(finalUrl, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+          Accept: 'application/json',
+        },
+        timeout: 20000,
+      });
+
+      return response.data;
+    } catch (error) {
+      logger.error(error);
+      return null;
+    }
+  }
+
+  async parseM3U8(url) {
+    try {
+      const response = await axios.get(url);
+
+      const parser = new m3u8.Parser();
+      parser.push(response.data);
+      parser.end();
+
+      return parser.manifest;
+    } catch (err) {
+      logger.error(err);
+      return null;
     }
   }
 
   page(skip) {
     if (skip) {
       const page = Math.ceil((skip || 0) / this.limit);
-      if (page === 0) {
-        return '';
-      }
-      return `${page}`;
+      return page === 0 ? '' : `${page}`;
     }
     return '';
   }
 
-  handleSearch({ extra: { search: keyword } }) {
-    return `/search/${keyword}/`;
+  handleSearch({ extra: { search } }) {
+    return `/search/${search}/`;
   }
 
   handleGenre({ extra: { genre } }) {
-    return '?genre=' + genre;
+    return `?genre=${genre}`;
   }
 
   handlePagination(url, { extra: { skip } }) {
-    return `?skip=${skip}`;
+    return `${url}?skip=${skip}`;
   }
 
-  getCatalogMetas(html) {
+  buildStream(url, label) {
+    const finalUrl = url.startsWith('http') ? url : this.normalizeUrl(url);
+
+    return {
+      title: label || this.name,
+      url: finalUrl,
+    };
+  }
+
+  getCatalogMetas() {
     return [];
   }
 
-  getAnalyticEvent(event, id) {
-    if (id) {
-      return `${event}-${id}`;
-    }
-    return `${event}-${this.getName()}`;
-  }
-
   async handleCatalog(args) {
-    if (args.type === Provider.TYPE && this.activate(args.id)) {
+    if (args.type !== Provider.TYPE || !this.activate(args.id)) {
+      return null;
+    }
+
+    try {
       logger.info({ args }, 'handleCatalog');
 
       let url = this.getInitialUrl(args.id);
@@ -99,122 +155,25 @@ class Provider {
         if (args.extra.genre) {
           url = this.handleGenre(args);
         }
+
+        if (args.extra.skip) {
+          url = this.handlePagination(url, args);
+        }
       }
 
-      if (args.extra.skip) {
-        url += this.handlePagination(url, args);
+      const html = await this.fetchHtml(url);
+
+      if (!html) {
+        return { metas: [] };
       }
 
-      const html = await this.fetchHtml(url).catch(() => '');
-      const metas = this.getCatalogMetas(html);
+      const metas = this.getCatalogMetas(html) || [];
 
-      logger.debug({ metasSize: metas.length }, 'catalog');
-
-      return Promise.resolve({ metas });
-    } else {
-      return Promise.resolve({ metas: [] });
+      return { metas };
+    } catch (error) {
+      logger.error(error);
+      return { metas: [] };
     }
-  }
-
-  async handleMeta(args) {
-    if (args.type === Provider.TYPE && this.activate(args.id)) {
-
-      return this.getMetadata(args).then(meta => {
-        return { meta };
-      });
-    }
-
-    return Promise.resolve({ meta: {} });
-  }
-
-  async getMetadata(args) {
-    logger.info({ args }, 'getMetadata');
-
-    const { id } = args;
-
-    return this.fetchHtml(id).then(html =>
-      this.parseVideoPage({ id, html })
-    );
-  }
-
-  async handleStream(args) {
-    const { id } = args;
-
-    if (args.type === Provider.TYPE && this.activate(id)) {
-
-      logger.info({ args }, 'handleStream');
-
-      return this.processStreams(args);
-    }
-
-    return Promise.resolve({ streams: [] });
-  }
-
-  async processStreams({ id }) {
-    return this.fetchHtml(id)
-      .then(html => this.parseVideoPage({ id, html }))
-      .then(meta => this.getStreams(meta));
-  }
-
-  getStreams(meta) {
-    return this.fetchHtml(meta.videoPageUrl)
-      .then(content => this.parseM3u8(content))
-      .then(streams =>
-        streams.map(stream =>
-          this.transformStream(meta.videoPageUrl, stream)
-        )
-      )
-      .then(streams => {
-        return { streams };
-      });
-  }
-
-  transformStream(url, stream) {
-    return stream;
-  }
-
-  parseM3u8(content) {
-    const streams = [];
-
-    const parser = new m3u8.Parser();
-    parser.push(content);
-    parser.end();
-
-    try {
-      parser.manifest.playlists.forEach(playlist => {
-        streams.push({
-          resolution: playlist.attributes.RESOLUTION.height + 'p',
-          uri: playlist.uri,
-        });
-      });
-
-      streams.sort(
-        (a, b) =>
-          parseInt(b.resolution.split('p')[0]) -
-          parseInt(a.resolution.split('p')[0])
-      );
-
-      logger.debug({ streams }, 'streams', streams.length);
-
-      return streams.map(stream => {
-        return {
-          type: 'movie',
-          url: stream.uri,
-          name: stream.resolution,
-        };
-      });
-    } catch (e) {
-      console.error('parseM3u8 error', e);
-      return streams;
-    }
-  }
-
-  parseVideoPage(args) {
-    return {};
-  }
-
-  track(a1, a2) {
-    // track(a1, a2)
   }
 }
 
