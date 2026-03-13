@@ -5,6 +5,7 @@ const logger = require('../logger');
 class Provider {
   static LIMIT = 50;
   static TYPE = 'movie';
+  static TRANSPORT_URL = '';
 
   constructor(baseUrl, name, limit) {
     this.baseUrl = baseUrl;
@@ -20,6 +21,15 @@ class Provider {
     return catalogId && catalogId.indexOf(this.getName()) !== -1;
   }
 
+  getInitialUrl() {
+    return this.baseUrl;
+  }
+
+  // REQUIRED by provider/index.js
+  static create() {
+    return new Provider('', 'default');
+  }
+
   normalizeUrl(url) {
     if (!url) return '';
 
@@ -33,7 +43,7 @@ class Provider {
   async fetchHtml(url) {
     const finalUrl = this.normalizeUrl(url);
 
-    console.log('fetching url', finalUrl);
+    console.info('fetching url', finalUrl);
 
     try {
       const response = await axios.get(finalUrl, {
@@ -49,125 +59,151 @@ class Provider {
       });
 
       return response.data;
-    } catch (err) {
-      logger.error(err);
+    } catch (error) {
+      logger.error(error);
       return '';
     }
   }
 
-  async parseM3U8(url) {
-    try {
-      const response = await axios.get(url);
-
-      const parser = new m3u8.Parser();
-      parser.push(response.data);
-      parser.end();
-
-      return parser.manifest;
-    } catch (err) {
-      logger.error(err);
-      return null;
+  page(skip) {
+    if (skip) {
+      const page = Math.ceil((skip || 0) / this.limit);
+      return page === 0 ? '' : `${page}`;
     }
+    return '';
   }
 
-  buildStream(url, label) {
-    const finalUrl = url.startsWith('http')
-      ? url
-      : this.normalizeUrl(url);
-
-    return {
-      title: label || this.name,
-      url: finalUrl,
-    };
+  handleSearch({ extra: { search: keyword } }) {
+    return `/search/${keyword}/`;
   }
 
-  /*
-  =========================
-  CATALOG
-  =========================
-  */
-
-  async handleCatalog(args) {
-    if (args.type !== Provider.TYPE || !this.activate(args.id)) {
-      return null;
-    }
-
-    try {
-      const html = await this.fetchHtml(this.baseUrl);
-
-      if (!html) return { metas: [] };
-
-      const metas = this.getCatalogMetas(html) || [];
-
-      return { metas };
-    } catch (err) {
-      logger.error(err);
-      return { metas: [] };
-    }
+  handleGenre({ extra: { genre } }) {
+    return '?genre=' + genre;
   }
 
-  /*
-  =========================
-  META
-  =========================
-  */
-
-  async handleMeta(args) {
-    if (!this.activate(args.id)) return null;
-
-    try {
-      const html = await this.fetchHtml(args.id);
-
-      if (!html) return { meta: {} };
-
-      const meta = await this.getMeta(html, args);
-
-      return { meta };
-    } catch (err) {
-      logger.error(err);
-      return { meta: {} };
-    }
+  handlePagination(url, { extra: { skip } }) {
+    return `?skip=${skip}`;
   }
-
-  /*
-  =========================
-  STREAM
-  =========================
-  */
-
-  async handleStream(args) {
-    if (!this.activate(args.id)) return null;
-
-    try {
-      const streams = await this.getStreams(args);
-
-      if (!streams) return { streams: [] };
-
-      return { streams };
-    } catch (err) {
-      logger.error(err);
-      return { streams: [] };
-    }
-  }
-
-  /*
-  =========================
-  PROVIDER METHODS
-  (overridden by each site)
-  =========================
-  */
 
   getCatalogMetas() {
     return [];
   }
 
-  async getMeta() {
+  async handleCatalog(args) {
+    if (args.type !== Provider.TYPE || !this.activate(args.id)) {
+      return Promise.resolve({ metas: [] });
+    }
+
+    logger.info({ args }, 'handleCatalog');
+
+    let url = this.getInitialUrl(args.id);
+
+    if (args.extra) {
+      if (args.extra.search) url = this.handleSearch(args);
+      if (args.extra.genre) url = this.handleGenre(args);
+    }
+
+    if (args.extra?.skip) {
+      url += this.handlePagination(url, args);
+    }
+
+    const html = await this.fetchHtml(url);
+    const metas = this.getCatalogMetas(html) || [];
+
+    return { metas };
+  }
+
+  async handleMeta(args) {
+    if (args.type !== Provider.TYPE || !this.activate(args.id)) {
+      return Promise.resolve({ meta: {} });
+    }
+
+    return this.getMetadata(args).then(meta => ({ meta }));
+  }
+
+  async getMetadata(args) {
+    logger.info({ args }, 'getMetadata');
+
+    const { id } = args;
+
+    return this.fetchHtml(id).then(html =>
+      this.parseVideoPage({ id, html })
+    );
+  }
+
+  async handleStream(args) {
+    const { id } = args;
+
+    if (args.type !== Provider.TYPE || !this.activate(id)) {
+      return Promise.resolve({ streams: [] });
+    }
+
+    logger.info({ args }, 'handleStream');
+
+    return this.processStreams(args);
+  }
+
+  async processStreams({ id }) {
+    return this.fetchHtml(id)
+      .then(html => this.parseVideoPage({ id, html }))
+      .then(meta => this.getStreams(meta));
+  }
+
+  getStreams(meta) {
+    return this.fetchHtml(meta.videoPageUrl)
+      .then(content => this.parseM3u8(content))
+      .then(streams =>
+        streams.map(stream =>
+          this.transformStream(meta.videoPageUrl, stream)
+        )
+      )
+      .then(streams => ({ streams }));
+  }
+
+  transformStream(url, stream) {
+    if (!stream.url?.startsWith('http')) {
+      stream.url = this.normalizeUrl(stream.url);
+    }
+
+    return stream;
+  }
+
+  parseM3u8(content) {
+    const streams = [];
+
+    const parser = new m3u8.Parser();
+    parser.push(content);
+    parser.end();
+
+    try {
+      parser.manifest.playlists.forEach(playlist => {
+        streams.push({
+          resolution: playlist.attributes.RESOLUTION.height + 'p',
+          uri: playlist.uri,
+        });
+      });
+
+      streams.sort(
+        (a, b) =>
+          parseInt(b.resolution) - parseInt(a.resolution)
+      );
+
+      return streams.map(stream => ({
+        type: 'movie',
+        url: stream.uri,
+        name: stream.resolution,
+      }));
+    } catch (e) {
+      console.error('parseM3u8 error', e);
+      return [];
+    }
+  }
+
+  parseVideoPage() {
     return {};
   }
 
-  async getStreams() {
-    return [];
-  }
+  track() {}
 }
 
 module.exports = Provider;
