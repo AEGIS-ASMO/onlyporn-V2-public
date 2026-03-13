@@ -13,6 +13,7 @@ const pathMappings = {
 class MissavProvider extends Provider {
 
   constructor() {
+    // FIXED DOMAIN
     super('https://missav.ws', 'missav', 10);
     this.dataset = {};
     this.metas = {};
@@ -58,15 +59,17 @@ class MissavProvider extends Provider {
         const videoPageUrl = $last.children('a').attr('href');
 
         if (videoPageUrl) {
-          metadatas.push(new meta.MetaPreview(
-            videoPageUrl,
-            'movie',
-            title,
-            poster,
-          ));
-
+          metadatas.push(
+            new meta.MetaPreview(
+              videoPageUrl,
+              'movie',
+              title,
+              poster,
+            )
+          );
         }
       });
+
     return metadatas;
   }
 
@@ -78,22 +81,37 @@ class MissavProvider extends Provider {
   parseVideoPage({ id, html }) {
     const $ = load(html);
     const $metas = $('meta');
+
     let metaMap = {};
+
     $metas.each((i, e) => {
       const attribs = e.attribs;
       metaMap[attribs.name || attribs.property] = attribs.content;
     });
+
     var regex = /urls:\s*\[(.*?)\]/g;
     var match = html.match(regex);
+
     let videoPageUrl = '';
-    if (match && match[1]) {
-      // Extract the contents inside the 'urls' array
-      const text = match[1].split(',')[1];
-      const leftPat = 'sixyik.com\\/';
-      const left = text.indexOf(leftPat);
-      const uuid = text.substring(left + leftPat.length).replace('\\/seek\\/_1.jpg"', '');
-      videoPageUrl = `https://surrit.com/${uuid}/playlist.m3u8`;
+
+    if (match && match.length) {
+      try {
+        const text = match[0].split(',')[1];
+        const leftPat = 'sixyik.com\\/';
+        const left = text.indexOf(leftPat);
+
+        if (left !== -1) {
+          const uuid = text
+            .substring(left + leftPat.length)
+            .replace('\\/seek\\/_1.jpg"', '');
+
+          videoPageUrl = `https://surrit.com/${uuid}/playlist.m3u8`;
+        }
+      } catch (e) {
+        logger.error(e);
+      }
     }
+
     const metaResponse = new meta.MetaResponse(
       id,
       Provider.TYPE,
@@ -101,9 +119,12 @@ class MissavProvider extends Provider {
       {
         background: metaMap['og:image'],
         description: metaMap['og:description'] || metaMap['og:title'],
-        genres: metaMap['keywords'].split(','),
+        genres: metaMap['keywords']
+          ? metaMap['keywords'].split(',')
+          : [],
       },
     );
+
     return {
       metaResponse,
       videoPageUrl,
@@ -111,7 +132,10 @@ class MissavProvider extends Provider {
   }
 
   transformStream(url, stream) {
-    return { ...stream, url: url.replace('playlist.m3u8', '') + stream.url };
+    return {
+      ...stream,
+      url: url.replace('playlist.m3u8', '') + stream.url,
+    };
   }
 }
 
