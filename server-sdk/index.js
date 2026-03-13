@@ -18,21 +18,6 @@ function serveHTTP(addonInterface, opts = {}) {
     app.use('/:resource/:type/:id/:extra?.json', (req, res, next) => {
         const { resource, type, id } = req.params;
 
-        if (addonEnabled(id)) {
-            const extra = req.params.extra ? qs.parse(req.params.extra) : {};
-            const clientIp = requestIp.getClientIp(req);
-
-            const properties = {
-                id,
-                clientIp,
-                extra,
-                resource,
-                type,
-            };
-
-            track(resource, properties);
-        }
-
         if (opts.cache) {
             res.setHeader('cache-control', 'max-age=' + opts.cache);
         }
