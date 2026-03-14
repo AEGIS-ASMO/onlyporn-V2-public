@@ -129,7 +129,7 @@ class PorntrexProvider extends Provider {
     return jsonString;
   }
 
-  parseVideoPage({ id, html }) {
+ async parseVideoPage({ id, html }) {
 
   // ---- METHOD 1 : OLD FLASHVARS ----
   let match =
