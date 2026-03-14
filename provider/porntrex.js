@@ -191,6 +191,7 @@ class PorntrexProvider extends Provider {
     logger.error({ e }, 'Porntrex parse error');
     return {};
   }
+
 }
 
 module.exports = PorntrexProvider.create;
