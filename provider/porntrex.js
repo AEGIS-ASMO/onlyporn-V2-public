@@ -131,9 +131,7 @@ class PorntrexProvider extends Provider {
 
   parseVideoPage({ id, html }) {
 
-  let match =
-    html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?video_alt_url[\s\S]*?\})/i) ||
-    html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?\})\s*,\s*\w+/i);
+  const match = html.match(/flashvars\s*:\s*(\{[\s\S]*?\})\s*\}/i);
 
   if (!match) {
     logger.warn('Porntrex: flashvars not found');
@@ -142,55 +140,37 @@ class PorntrexProvider extends Provider {
 
   try {
 
-    const cleaned = this.fixLooseJson(
-      match[1]
-        .replace(/;$/, '')
-        .trim()
-    );
+    const cleaned = this.fixLooseJson(match[1]);
 
     const data = JSON.parse(cleaned);
-
-    const {
-      video_title,
-      video_categories,
-      preview_url,
-      video_alt_url5,
-      video_alt_url4,
-      video_alt_url3,
-      video_alt_url2,
-      video_alt_url,
-      video_alt_url5_text,
-      video_alt_url4_text,
-      video_alt_url3_text,
-      video_alt_url2_text,
-      video_alt_url_text
-    } = data;
 
     const metaResponse = new meta.MetaResponse(
       id,
       'movie',
-      video_title || 'Porntrex Video',
+      data.video_title || 'Porntrex Video',
       {
-        genres: video_categories ? video_categories.split(',') : [],
-        background: preview_url?.startsWith('http')
-          ? preview_url
-          : 'https:' + preview_url,
-        description: video_title
+        genres: data.video_categories
+          ? data.video_categories.split(',')
+          : [],
+        background: data.preview_url?.startsWith('http')
+          ? data.preview_url
+          : 'https:' + data.preview_url,
+        description: data.video_title
       }
     );
 
     return {
       metaResponse,
-      video_alt_url5,
-      video_alt_url4,
-      video_alt_url3,
-      video_alt_url2,
-      video_alt_url,
-      video_alt_url5_text,
-      video_alt_url4_text,
-      video_alt_url3_text,
-      video_alt_url2_text,
-      video_alt_url_text
+      video_alt_url5: data.video_alt_url5 || data.video_url,
+      video_alt_url4: data.video_alt_url4,
+      video_alt_url3: data.video_alt_url3,
+      video_alt_url2: data.video_alt_url2,
+      video_alt_url: data.video_alt_url,
+      video_alt_url5_text: data.video_alt_url5_text || data.video_url_text,
+      video_alt_url4_text: data.video_alt_url4_text,
+      video_alt_url3_text: data.video_alt_url3_text,
+      video_alt_url2_text: data.video_alt_url2_text,
+      video_alt_url_text: data.video_alt_url_text
     };
 
   } catch (e) {
