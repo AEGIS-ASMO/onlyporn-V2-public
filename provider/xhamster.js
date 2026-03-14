@@ -170,6 +170,11 @@ if (sources?.hls?.h264?.url) {
   streamUrl = sources.mp4.medium.url;
 }
 
+/* FIX: ignore invalid tokens */
+if (streamUrl && !streamUrl.startsWith('http')) {
+  streamUrl = null;
+}
+
     const tags =
       json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
 
