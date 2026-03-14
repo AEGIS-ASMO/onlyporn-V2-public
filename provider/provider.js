@@ -39,7 +39,7 @@ class Provider {
   async fetchHtml(url) {
   console.info('fetching url', url);
   try {
-    const response = await axios.get(url, {
+    const response = await client.get(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
