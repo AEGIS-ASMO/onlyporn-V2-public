@@ -168,7 +168,12 @@ class Provider {
 
   getStreams(meta) {
     return this.fetchHtml(meta.videoPageUrl)
-      .then(content => this.parseM3u8(content))
+      .then(content => {
+  if (content.includes("#EXTM3U")) {
+    return this.parseM3u8(content);
+  }
+  return [];
+})
       .then(streams =>
         streams.map(stream =>
           this.transformStream(meta.videoPageUrl, stream)
