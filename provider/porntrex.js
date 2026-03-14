@@ -121,12 +121,13 @@ class PorntrexProvider extends Provider {
     return jsonString;
   }
 
- async parseVideoPage({ id, html })
-// prevent double fetch when Stremio calls meta + stream
-if (this.metas[id]) {
-  logger.debug({ id }, 'Porntrex cache hit');
-  return this.metas[id];
-} {
+ async parseVideoPage({ id, html }) {
+
+  // prevent double fetch when Stremio calls meta + stream
+  if (this.metas[id]) {
+    logger.debug({ id }, 'Porntrex cache hit');
+    return this.metas[id];
+  }
 
   // ---- METHOD 1 : OLD FLASHVARS ----
   let match =
@@ -273,7 +274,7 @@ const metaResponse = new meta.MetaResponse(
   }
 );
 
-return {
+const result = {
   metaResponse,
   video_alt_url5,
   video_alt_url4,
@@ -286,6 +287,10 @@ return {
   video_alt_url2_text,
   video_alt_url_text
 };
+
+this.metas[id] = result;
+
+return result;
 }
 
 }
