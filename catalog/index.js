@@ -1,6 +1,5 @@
 const shuffle = require('fisher-yates');
 const porntrexCatalogs = require('./porntrex');
-const missavCatalog = require('./missav.json');
 const { spankbangCatalogs } = require('./spankbang');
 const xhamsterCatalogs = require('./xhamster');
 const { catalogs: epornerCatalogs } = require('./eporner');
@@ -17,7 +16,6 @@ const catalogNames = [
   'xhamster',
   'eporner',
   'porntrex',
-  'missav',
   'xvideos',
   'sxyprn'
 ];
@@ -28,8 +26,7 @@ const catalogs = [
   ...porntrexCatalogs,
   ...spankbangCatalogs,
   ...sxyprnCatalogs,
-  xvideosCatalog,
-  missavCatalog
+  xvideosCatalog
 ];
 
 const addonEnabled = (id) => {
