@@ -92,8 +92,7 @@ class PorntrexProvider extends Provider {
 
       const streams = qualities
         .filter(key => meta.hasOwnProperty(key) && meta[key])
-        .map(key => {
-          return {
+        .map(key => ({
   url: meta[key].startsWith('http')
     ? meta[key]
     : 'https:' + meta[key],
@@ -105,7 +104,7 @@ class PorntrexProvider extends Provider {
       referer: 'https://porntrex.com/'
     }
   }
-};
+}));
 
       logger.debug({ streams }, 'streams %d', streams.length);
 
