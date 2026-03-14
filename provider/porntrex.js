@@ -210,15 +210,34 @@ logger.debug({ embedUrl }, 'Porntrex loading embed');
 
 return this.fetchHtml(embedUrl).then(embedHtml => {
 
-  const hlsMatch = embedHtml.match(/(https:[^"]+\.m3u8[^"]*)/);
+  const jsonMatch = embedHtml.match(/flashvars\s*=\s*(\{[\s\S]*?\});/);
 
-  if (!hlsMatch) {
-    logger.warn('Porntrex: HLS stream not found');
+  if (!jsonMatch) {
+    logger.warn('Porntrex: player json not found');
     return {};
   }
 
-  const video_alt_url = hlsMatch[1];
-  const video_alt_url_text = 'HLS';
+  let data;
+
+  try {
+    data = JSON.parse(jsonMatch[1]);
+  } catch (e) {
+    logger.error({ e }, 'Porntrex embed JSON parse error');
+    return {};
+  }
+
+  const {
+    video_alt_url5,
+    video_alt_url4,
+    video_alt_url3,
+    video_alt_url2,
+    video_alt_url,
+    video_alt_url5_text,
+    video_alt_url4_text,
+    video_alt_url3_text,
+    video_alt_url2_text,
+    video_alt_url_text
+  } = data;
 
   const title =
     html.match(/<title>(.*?)<\/title>/i)?.[1]?.replace(' - Porntrex', '') ||
@@ -233,7 +252,15 @@ return this.fetchHtml(embedUrl).then(embedHtml => {
 
   return {
     metaResponse,
+    video_alt_url5,
+    video_alt_url4,
+    video_alt_url3,
+    video_alt_url2,
     video_alt_url,
+    video_alt_url5_text,
+    video_alt_url4_text,
+    video_alt_url3_text,
+    video_alt_url2_text,
     video_alt_url_text
   };
 });
