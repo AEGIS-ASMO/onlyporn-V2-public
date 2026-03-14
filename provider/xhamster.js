@@ -158,17 +158,17 @@ class XhamsterProvider extends Provider {
 
     let streamUrl = null;
 
-    const sources =
-      json?.xplayerSettings?.sources ||
-      {};
+const sources = json?.xplayerSettings?.sources || {};
 
-    if (sources?.hls?.h264?.url) {
-      streamUrl = sources.hls.h264.url;
-    }
-
-    if (!streamUrl && sources?.hls?.av1?.url) {
-      streamUrl = sources.hls.av1.url;
-    }
+if (sources?.hls?.h264?.url) {
+  streamUrl = sources.hls.h264.url;
+} else if (sources?.hls?.av1?.url) {
+  streamUrl = sources.hls.av1.url;
+} else if (sources?.mp4?.high?.url) {
+  streamUrl = sources.mp4.high.url;
+} else if (sources?.mp4?.medium?.url) {
+  streamUrl = sources.mp4.medium.url;
+}
 
     const tags =
       json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
