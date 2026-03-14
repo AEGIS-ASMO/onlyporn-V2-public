@@ -160,7 +160,7 @@ class EpornerProvider extends Provider {
     };
     const url = `https://www.eporner.com/xhr/video/${videoId || getVideoId(meta.id)}?hash=${this.hash(hash)}&domain=www.eporner.com&pixelRatio=2&playerWidth=0&playerHeight=0&fallback=false&embed=false&supportedFormats=hls,dash,h265,vp9,av1,mp4&_=1715117288633`;
     return this.fetchHtml(url)
-      .then((res) => JSON.parse(res))
+      .then((res) => typeof res === "string" ? JSON.parse(res) : res
       .then((res) => this.selectSources(res.sources));
   }
 
