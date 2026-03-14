@@ -173,18 +173,22 @@ if (sources?.hls?.h264?.url) {
     const tags =
       json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
 
-    return new meta.MetaResponse(
-      id,
-      Provider.TYPE,
-      title,
-      {
-        videoPageUrl: streamUrl,
-        description,
-        poster,
-        background: poster,
-        genres: tags,
-      },
-    );
+    if (!streamUrl) {
+  logger.warn("xHamster: no stream URL found");
+}
+
+return new meta.MetaResponse(
+  id,
+  Provider.TYPE,
+  title,
+  {
+    videoPageUrl: streamUrl,
+    description,
+    poster,
+    background: poster,
+    genres: tags,
+  },
+);
   }
 
   transformStream(url, stream) {
