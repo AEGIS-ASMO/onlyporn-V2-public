@@ -131,52 +131,94 @@ class PorntrexProvider extends Provider {
 
   parseVideoPage({ id, html }) {
 
-  const match = html.match(/flashvars\s*:\s*(\{[\s\S]*?\})\s*\}/i);
+  // ---- METHOD 1 : OLD FLASHVARS ----
+  let match =
+    html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?video_alt_url[\s\S]*?\})/i) ||
+    html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?\})\s*,\s*\w+/i);
 
-  if (!match) {
-    logger.warn('Porntrex: flashvars not found');
+  if (match) {
+    try {
+
+      const cleaned = this.fixLooseJson(
+        match[1].replace(/;$/, '').trim()
+      );
+
+      const data = JSON.parse(cleaned);
+
+      const {
+        video_title,
+        video_categories,
+        preview_url,
+        video_alt_url5,
+        video_alt_url4,
+        video_alt_url3,
+        video_alt_url2,
+        video_alt_url,
+        video_alt_url5_text,
+        video_alt_url4_text,
+        video_alt_url3_text,
+        video_alt_url2_text,
+        video_alt_url_text
+      } = data;
+
+      const metaResponse = new meta.MetaResponse(
+        id,
+        'movie',
+        video_title || 'Porntrex Video',
+        {
+          genres: video_categories ? video_categories.split(',') : [],
+          background: preview_url?.startsWith('http')
+            ? preview_url
+            : 'https:' + preview_url,
+          description: video_title
+        }
+      );
+
+      return {
+        metaResponse,
+        video_alt_url5,
+        video_alt_url4,
+        video_alt_url3,
+        video_alt_url2,
+        video_alt_url,
+        video_alt_url5_text,
+        video_alt_url4_text,
+        video_alt_url3_text,
+        video_alt_url2_text,
+        video_alt_url_text
+      };
+
+    } catch (e) {
+      logger.error({ e }, 'Porntrex flashvars parse error');
+    }
+  }
+
+  // ---- METHOD 2 : NEW PLAYER ----
+  const playerMatch = html.match(/kt_player\([^,]+,[^,]+,["'](\d+)["']/);
+
+  if (!playerMatch) {
+    logger.warn('Porntrex: player config not found');
     return {};
   }
 
-  try {
+  const videoId = playerMatch[1];
 
-    const cleaned = this.fixLooseJson(match[1]);
+  const hls = `https://ptx.cdntrex.com/get_file/3/${videoId}/playlist.m3u8`;
 
-    const data = JSON.parse(cleaned);
+  const metaResponse = new meta.MetaResponse(
+    id,
+    'movie',
+    'Porntrex Video',
+    {
+      description: 'Porntrex stream'
+    }
+  );
 
-    const metaResponse = new meta.MetaResponse(
-      id,
-      'movie',
-      data.video_title || 'Porntrex Video',
-      {
-        genres: data.video_categories
-          ? data.video_categories.split(',')
-          : [],
-        background: data.preview_url?.startsWith('http')
-          ? data.preview_url
-          : 'https:' + data.preview_url,
-        description: data.video_title
-      }
-    );
-
-    return {
-      metaResponse,
-      video_alt_url5: data.video_alt_url5 || data.video_url,
-      video_alt_url4: data.video_alt_url4,
-      video_alt_url3: data.video_alt_url3,
-      video_alt_url2: data.video_alt_url2,
-      video_alt_url: data.video_alt_url,
-      video_alt_url5_text: data.video_alt_url5_text || data.video_url_text,
-      video_alt_url4_text: data.video_alt_url4_text,
-      video_alt_url3_text: data.video_alt_url3_text,
-      video_alt_url2_text: data.video_alt_url2_text,
-      video_alt_url_text: data.video_alt_url_text
-    };
-
-  } catch (e) {
-    logger.error({ e }, 'Porntrex parse error');
-    return {};
-  }
+  return {
+    metaResponse,
+    video_alt_url: hls,
+    video_alt_url_text: 'HLS'
+  };
 }
 
 }
