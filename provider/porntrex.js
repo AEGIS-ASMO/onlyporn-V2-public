@@ -246,7 +246,10 @@ const metaResponse = new meta.MetaResponse(
   id,
   'movie',
   title,
-  { description: title }
+  {
+    description: title,
+    poster: html.match(/poster="([^"]+)"/)?.[1]
+  }
 );
 
 return {
