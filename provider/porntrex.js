@@ -107,11 +107,6 @@ class PorntrexProvider extends Provider {
   return [];
 }
 
-      logger.debug({ streams }, 'streams %d', streams.length);
-
-      return { streams };
-    }
-
     return Promise.resolve({ streams: [] });
   }
 
