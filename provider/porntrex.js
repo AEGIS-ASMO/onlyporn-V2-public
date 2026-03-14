@@ -85,7 +85,12 @@ class PorntrexProvider extends Provider {
     return [];
   }
 
-  const qualities = Object.keys(data).filter(
+  if (!data) {
+  logger.warn("Porntrex: stream data missing");
+  return [];
+}
+
+const qualities = Object.keys(data).filter(
     k => k.startsWith('video_alt_url') && !k.endsWith('_text')
   );
 
@@ -227,7 +232,9 @@ logger.debug({ embedUrl }, 'Porntrex loading embed');
 const embedHtml = await this.fetchHtml(embedUrl);
 
 const jsonMatch =
-  embedHtml.match(/flashvars\s*[:=]\s*(\{[\s\S]*?\})/i);
+  embedHtml.match(/flashvars\s*=\s*(\{[\s\S]*?\});/i) ||
+  embedHtml.match(/window\.flashvars\s*=\s*(\{[\s\S]*?\});/i) ||
+  embedHtml.match(/var\s+flashvars\s*=\s*(\{[\s\S]*?\});/i);
 
 if (!jsonMatch) {
   logger.warn('Porntrex: player json not found');
@@ -272,8 +279,9 @@ const {
 } = data;
 
 const title =
-  html.match(/<title>(.*?)<\/title>/i)?.[1]?.replace(' - Porntrex', '') ||
-  'Porntrex Video';
+  html.match(/<title>(.*?)<\/title>/i)?.[1]
+    ?.replace(/\s*-\s*Porntrex/i, '')
+    ?.trim() || 'Porntrex Video';
 
 const metaResponse = new meta.MetaResponse(
   id,
