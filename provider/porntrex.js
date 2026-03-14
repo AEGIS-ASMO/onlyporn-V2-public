@@ -164,7 +164,7 @@ class PorntrexProvider extends Provider {
           genres: video_categories ? video_categories.split(',') : [],
           background: preview_url
   ? (preview_url.startsWith('http') ? preview_url : 'https:' + preview_url)
-  : null
+  : null,
             ? preview_url
             : 'https:' + preview_url,
           description: video_title
@@ -250,7 +250,7 @@ const metaResponse = new meta.MetaResponse(
 );
 
 return {
-  meta: metaResponse.meta,
+  metaResponse.meta,
   video_alt_url5,
   video_alt_url4,
   video_alt_url3,
