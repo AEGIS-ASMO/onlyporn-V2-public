@@ -131,67 +131,72 @@ class PorntrexProvider extends Provider {
 
   parseVideoPage({ id, html }) {
 
-  const regex = /flashvars\s*=\s*(\{[\s\S]*?\});/i;
+  const flashvarsMatch = html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?\})/i);
 
-  const match = html.match(regex);
-
-  if (!match || !match[1]) {
+  if (!flashvarsMatch) {
+    logger.warn("Porntrex: flashvars not found");
     return {};
   }
 
-  try {
+  let data;
 
+  try {
     const cleaned = this.fixLooseJson(
-      match[1]
-        .replace(/https?:\/\//g, '')
+      flashvarsMatch[1]
         .replace(/;$/, '')
         .trim()
     );
 
-    const data = JSON.parse(cleaned);
-
-    const {
-      video_title,
-      video_categories,
-      preview_url,
-      video_alt_url5,
-      video_alt_url4,
-      video_alt_url3,
-      video_alt_url2,
-      video_alt_url,
-      video_alt_url5_text,
-      video_alt_url4_text,
-      video_alt_url3_text,
-      video_alt_url2_text,
-      video_alt_url_text
-    } = data;
-
-    const metaResponse = new meta.MetaResponse(
-      id,
-      'movie',
-      video_title,
-      {
-        genres: video_categories ? video_categories.split(',') : [],
-        background: preview_url ? 'https:' + preview_url : '',
-        description: video_title
-      }
-    );
-
-    return {
-      metaResponse,
-      video_alt_url5,
-      video_alt_url4,
-      video_alt_url3,
-      video_alt_url2,
-      video_alt_url,
-      video_alt_url5_text,
-      video_alt_url4_text,
-      video_alt_url3_text,
-      video_alt_url2_text,
-      video_alt_url_text
-    };
+    data = JSON.parse(cleaned);
 
   } catch (e) {
+    logger.error("Porntrex JSON parse error", e);
+    return {};
+  }
+
+  const {
+    video_title,
+    video_categories,
+    preview_url,
+    video_alt_url,
+    video_alt_url2,
+    video_alt_url3,
+    video_alt_url4,
+    video_alt_url5,
+    video_alt_url_text,
+    video_alt_url2_text,
+    video_alt_url3_text,
+    video_alt_url4_text,
+    video_alt_url5_text
+  } = data;
+
+  const metaResponse = new meta.MetaResponse(
+    id,
+    'movie',
+    video_title,
+    {
+      genres: video_categories ? video_categories.split(',') : [],
+      background: preview_url?.startsWith('http')
+        ? preview_url
+        : 'https:' + preview_url,
+      description: video_title
+    }
+  );
+
+  return {
+    metaResponse,
+    video_alt_url,
+    video_alt_url2,
+    video_alt_url3,
+    video_alt_url4,
+    video_alt_url5,
+    video_alt_url_text,
+    video_alt_url2_text,
+    video_alt_url3_text,
+    video_alt_url4_text,
+    video_alt_url5_text
+  };
+} catch (e) {
     logger.error({ e }, 'Porntrex parse error');
     return {};
   }
