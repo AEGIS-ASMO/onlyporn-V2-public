@@ -204,7 +204,7 @@ return {
 
   // ---- METHOD 2 : EMBED PLAYER ----
 
-const idMatch = id.match(/\/video\/([^/]+)/);
+const idMatch = id.match(/\/video\/(\d+)/);
 
 if (!idMatch) {
   logger.warn('Porntrex: video id not found');
@@ -229,10 +229,7 @@ const embedHtml = await this.fetchHtml(embedUrl);
 // DEBUG: inspect embed HTML
 logger.debug(embedHtml.substring(0, 1000), 'Porntrex embed HTML');
 
-const jsonMatch =
-  embedHtml.match(/flashvars\s*=\s*(\{[\s\S]*?\});/i) ||
-  embedHtml.match(/window\.flashvars\s*=\s*(\{[\s\S]*?\});/i) ||
-  embedHtml.match(/var\s+flashvars\s*=\s*(\{[\s\S]*?\});/i);
+const jsonMatch = embedHtml.match(/\{[^}]*video_alt_url[^}]*\}/s);
 
 if (!jsonMatch) {
   logger.warn('Porntrex: player json not found');
