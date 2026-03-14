@@ -131,14 +131,11 @@ class PorntrexProvider extends Provider {
 
   parseVideoPage({ id, html }) {
 
-  // Support both:
-  // flashvars = {}
-  // flashvars: {}
-  const regex = /flashvars\s*[:=]\s*(\{[\s\S]*?\})/i;
+  let match =
+    html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?video_alt_url[\s\S]*?\})/i) ||
+    html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?\})\s*,\s*\w+/i);
 
-  const match = html.match(regex);
-
-  if (!match || !match[1]) {
+  if (!match) {
     logger.warn('Porntrex: flashvars not found');
     return {};
   }
@@ -172,7 +169,7 @@ class PorntrexProvider extends Provider {
     const metaResponse = new meta.MetaResponse(
       id,
       'movie',
-      video_title,
+      video_title || 'Porntrex Video',
       {
         genres: video_categories ? video_categories.split(',') : [],
         background: preview_url?.startsWith('http')
