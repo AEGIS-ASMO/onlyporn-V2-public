@@ -195,7 +195,6 @@ class PorntrexProvider extends Provider {
 
   // ---- METHOD 2 : EMBED PLAYER ----
 
-// extract video id from url
 const idMatch = id.match(/video\/(\d+)/);
 
 if (!idMatch) {
@@ -209,7 +208,7 @@ const embedUrl = `https://www.porntrex.com/embed/${videoId}`;
 
 logger.debug({ embedUrl }, 'Porntrex loading embed');
 
-return this.httpGet(embedUrl).then(embedHtml => {
+return this.fetchHtml(embedUrl).then(embedHtml => {
 
   const hlsMatch = embedHtml.match(/(https:[^"]+\.m3u8[^"]*)/);
 
