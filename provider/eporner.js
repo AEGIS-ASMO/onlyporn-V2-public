@@ -152,30 +152,38 @@ class EpornerProvider extends Provider {
   }
 
   getStreams(meta) {
-    const { hash, videoId } = meta.extra;
-    const getVideoId = (id) => {
-      const i = id.indexOf('video-') + 6;
-      const j = id.indexOf('/', i);
-      return id.substring(i, j);
-    };
-    const url = `https://www.eporner.com/xhr/video/${videoId || getVideoId(meta.id)}?hash=${this.hash(hash)}&domain=www.eporner.com&pixelRatio=2&playerWidth=0&playerHeight=0&fallback=false&embed=false&supportedFormats=hls,dash,h265,vp9,av1,mp4&_=1715117288633`;
-    return this.fetchHtml(url)
-  .then((res) => {
+  const { hash, videoId } = meta.extra;
+
+  const getVideoId = (id) => {
+    const i = id.indexOf('video-') + 6;
+    const j = id.indexOf('/', i);
+    return id.substring(i, j);
+  };
+
+  const url = `https://www.eporner.com/xhr/video/${videoId || getVideoId(meta.id)}?hash=${this.hash(hash)}&domain=www.eporner.com&pixelRatio=2&playerWidth=0&playerHeight=0&fallback=false&embed=false&supportedFormats=hls,dash,h265,vp9,av1,mp4`;
+
+  return this.fetchHtml(url).then((res) => {
     const data = typeof res === "string" ? JSON.parse(res) : res;
     return this.selectSources(data.sources);
   });
+}
 
-  selectSources(sources) {
-    if (sources.hls) {
-      return super.getStreams({ videoPageUrl: sources.hls.auto.src });
-    } else if (sources.mp4) {
-      const streams = Object.values(sources.mp4).map((mp4) => {
-        return { url: mp4.src, name: mp4.labelShort, type: Provider.TYPE };
-      })
-      return { streams };
-    }
-    return { streams: [] };
+selectSources(sources) {
+  if (sources.hls) {
+    return super.getStreams({ videoPageUrl: sources.hls.auto.src });
   }
+
+  if (sources.mp4) {
+    const streams = Object.values(sources.mp4).map((mp4) => ({
+      url: mp4.src,
+      name: mp4.labelShort,
+      type: Provider.TYPE,
+    }));
+
+    return { streams };
+  }
+
+  return { streams: [] };
 }
 
 module.exports = EpornerProvider.create;
