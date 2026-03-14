@@ -76,15 +76,15 @@ class PorntrexProvider extends Provider {
 
   async getStreams(meta) {
 
-  if (!meta) return [];
+  if (!meta) return { streams: [] };
 
-  const id = meta.id || meta.metaResponse?.id;
+  const id = meta.metaResponse?.id || meta.id;
 
   const data = this.dataset[id];
 
   if (!data) {
     logger.warn({ id }, 'Porntrex streams dataset missing');
-    return [];
+    return { streams: [] };
   }
 
   const qualities = Object.keys(data).filter(
