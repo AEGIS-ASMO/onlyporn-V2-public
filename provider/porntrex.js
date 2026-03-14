@@ -194,4 +194,5 @@ class PorntrexProvider extends Provider {
 
 }
 
+}
 module.exports = PorntrexProvider.create;
