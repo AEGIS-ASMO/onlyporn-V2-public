@@ -208,62 +208,63 @@ const embedUrl = `https://www.porntrex.com/embed/${videoId}`;
 
 logger.debug({ embedUrl }, 'Porntrex loading embed');
 
-return this.fetchHtml(embedUrl).then(embedHtml => {
+const embedHtml = await this.fetchHtml(embedUrl);
 
-  const jsonMatch = embedHtml.match(/flashvars\s*=\s*(\{[\s\S]*?\});/);
+const jsonMatch =
+  embedHtml.match(/flashvars\s*[:=]\s*(\{[\s\S]*?\})/i);
 
-  if (!jsonMatch) {
-    logger.warn('Porntrex: player json not found');
-    return {};
-  }
+if (!jsonMatch) {
+  logger.warn('Porntrex: player json not found');
+  return {};
+}
 
-  let data;
+let data;
 
-  try {
-    data = JSON.parse(jsonMatch[1]);
-  } catch (e) {
-    logger.error({ e }, 'Porntrex embed JSON parse error');
-    return {};
-  }
+try {
+  const cleaned = this.fixLooseJson(jsonMatch[1]);
+  data = JSON.parse(cleaned);
+} catch (e) {
+  logger.error({ e }, 'Porntrex embed JSON parse error');
+  return {};
+}
 
-  const {
-    video_alt_url5,
-    video_alt_url4,
-    video_alt_url3,
-    video_alt_url2,
-    video_alt_url,
-    video_alt_url5_text,
-    video_alt_url4_text,
-    video_alt_url3_text,
-    video_alt_url2_text,
-    video_alt_url_text
-  } = data;
+const {
+  video_alt_url5,
+  video_alt_url4,
+  video_alt_url3,
+  video_alt_url2,
+  video_alt_url,
+  video_alt_url5_text,
+  video_alt_url4_text,
+  video_alt_url3_text,
+  video_alt_url2_text,
+  video_alt_url_text
+} = data;
 
-  const title =
-    html.match(/<title>(.*?)<\/title>/i)?.[1]?.replace(' - Porntrex', '') ||
-    'Porntrex Video';
+const title =
+  html.match(/<title>(.*?)<\/title>/i)?.[1]?.replace(' - Porntrex', '') ||
+  'Porntrex Video';
 
-  const metaResponse = new meta.MetaResponse(
-    id,
-    'movie',
-    title,
-    { description: title }
-  );
+const metaResponse = new meta.MetaResponse(
+  id,
+  'movie',
+  title,
+  { description: title }
+);
 
-  return {
-    metaResponse,
-    video_alt_url5,
-    video_alt_url4,
-    video_alt_url3,
-    video_alt_url2,
-    video_alt_url,
-    video_alt_url5_text,
-    video_alt_url4_text,
-    video_alt_url3_text,
-    video_alt_url2_text,
-    video_alt_url_text
-  };
-});
+return {
+  metaResponse,
+  video_alt_url5,
+  video_alt_url4,
+  video_alt_url3,
+  video_alt_url2,
+  video_alt_url,
+  video_alt_url5_text,
+  video_alt_url4_text,
+  video_alt_url3_text,
+  video_alt_url2_text,
+  video_alt_url_text
+};
 }
 
 }
