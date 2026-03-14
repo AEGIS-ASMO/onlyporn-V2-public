@@ -32,24 +32,28 @@ class Provider {
   }
 
   async fetchHtml(url) {
-    console.info('fetching url', url);
-    try {
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
-          Referer: this.baseUrl,
-        },
-        timeout: 15000,
-      });
+  console.info('fetching url', url);
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
+        "Accept":
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": this.baseUrl,
+        "Origin": this.baseUrl,
+        "Connection": "keep-alive"
+      },
+      timeout: 15000
+    });
 
-      return response.data;
-    } catch (error) {
-      console.error(error);
-      return '';
-    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    return '';
   }
+}
 
   page(skip) {
     if (skip) {
