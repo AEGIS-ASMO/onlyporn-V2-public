@@ -190,16 +190,23 @@ class PorntrexProvider extends Provider {
 
   // ---- METHOD 2 : EMBED PLAYER ----
 
-const idMatch = id.match(/video\/(\d+)/);
+const idMatch = id.match(/\/(\d+)/);
 
 if (!idMatch) {
   logger.warn('Porntrex: video id not found');
-  return {};
+  return {
+  metaResponse: new meta.MetaResponse(
+    id,
+    'movie',
+    'Porntrex Video',
+    { description: 'Porntrex Video' }
+  )
+};
 }
 
 const videoId = idMatch[1];
 
-const embedUrl = `https://www.porntrex.com/embed/${videoId}`;
+const embedUrl = `${this.baseUrl}embed/${videoId}`;
 
 logger.debug({ embedUrl }, 'Porntrex loading embed');
 
@@ -210,7 +217,14 @@ const jsonMatch =
 
 if (!jsonMatch) {
   logger.warn('Porntrex: player json not found');
-  return {};
+  return {
+  metaResponse: new meta.MetaResponse(
+    id,
+    'movie',
+    'Porntrex Video',
+    { description: 'Porntrex Video' }
+  )
+};
 }
 
 let data;
@@ -220,7 +234,14 @@ try {
   data = JSON.parse(cleaned);
 } catch (e) {
   logger.error({ e }, 'Porntrex embed JSON parse error');
-  return {};
+  return {
+  metaResponse: new meta.MetaResponse(
+    id,
+    'movie',
+    'Porntrex Video',
+    { description: 'Porntrex Video' }
+  )
+};
 }
 
 const {
