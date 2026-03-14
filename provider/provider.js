@@ -1,4 +1,9 @@
 const axios = require('axios');
+const { wrapper } = require('axios-cookiejar-support');
+const { CookieJar } = require('tough-cookie');
+
+const jar = new CookieJar();
+const client = wrapper(axios.create({ jar }));
 const m3u8 = require('m3u8-parser');
 const logger = require('../logger');
 
