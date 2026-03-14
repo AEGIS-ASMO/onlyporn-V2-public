@@ -131,9 +131,14 @@ class PorntrexProvider extends Provider {
 
   // prevent double fetch when Stremio calls meta + stream
   if (this.metas[id]) {
-    logger.debug({ id }, 'Porntrex cache hit');
-    return this.metas[id];
-  }
+  logger.debug({ id }, 'Porntrex cache hit');
+  return this.metas[id];
+}
+
+if (this.dataset[id]) {
+  logger.debug({ id }, 'Porntrex dataset cache hit');
+  return this.metas[id];
+}
 
   // ---- METHOD 1 : OLD FLASHVARS ----
   let match =
