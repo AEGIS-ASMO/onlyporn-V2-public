@@ -74,11 +74,6 @@ class PorntrexProvider extends Provider {
     return metas;
   }
 
-  async getMetadata(args) {
-    return super.getMetadata(args)
-      .then(meta => meta.metaResponse);
-  }
-
   async getStreams(meta) {
     if (meta) {
 
