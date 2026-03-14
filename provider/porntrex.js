@@ -76,22 +76,26 @@ class PorntrexProvider extends Provider {
 
   async getStreams(meta) {
 
-  if (!meta) {
+  if (!meta) return [];
+
+  const data = this.dataset[meta.id];
+
+  if (!data) {
+    logger.warn({ id: meta.id }, 'Porntrex streams dataset missing');
     return [];
   }
 
-  // detect any video_alt_url keys dynamically
-  const qualities = Object.keys(meta).filter(k =>
-    k.startsWith('video_alt_url')
+  const qualities = Object.keys(data).filter(
+    k => k.startsWith('video_alt_url') && !k.endsWith('_text')
   );
 
   const streams = qualities
-    .filter(key => meta[key])
+    .filter(key => data[key])
     .map(key => ({
-      url: meta[key].startsWith('http')
-        ? meta[key]
-        : 'https:' + meta[key],
-      name: meta[key + '_text'] || key,
+      url: data[key].startsWith('http')
+        ? data[key]
+        : 'https:' + data[key],
+      name: data[key + '_text'] || key,
       type: Provider.TYPE,
       behaviorHints: {
         notWebReady: true,
