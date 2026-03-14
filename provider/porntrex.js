@@ -193,57 +193,51 @@ class PorntrexProvider extends Provider {
     }
   }
 
-  // ---- METHOD 2 : NEW PLAYER ----
-const playerMatch = html.match(/kt_player\([^,]+,[^,]+,["'](\d+)["']/);
+  // ---- METHOD 2 : EMBED PLAYER ----
 
-if (!playerMatch) {
-  logger.warn('Porntrex: player config not found');
+// extract video id from url
+const idMatch = id.match(/video\/(\d+)/);
+
+if (!idMatch) {
+  logger.warn('Porntrex: video id not found');
   return {};
 }
 
-const videoId = playerMatch[1];
+const videoId = idMatch[1];
 
-// modern CDN streams
-const base = `https://ptx.cdntrex.com/get_file/3/${videoId}`;
+const embedUrl = `https://www.porntrex.com/embed/${videoId}`;
 
-const video_alt_url5 = `${base}/1080p.mp4`;
-const video_alt_url4 = `${base}/720p.mp4`;
-const video_alt_url3 = `${base}/480p.mp4`;
-const video_alt_url2 = `${base}/360p.mp4`;
-const video_alt_url = `${base}/playlist.m3u8`;
+logger.debug({ embedUrl }, 'Porntrex loading embed');
 
-const video_alt_url5_text = '1080p';
-const video_alt_url4_text = '720p';
-const video_alt_url3_text = '480p';
-const video_alt_url2_text = '360p';
-const video_alt_url_text = 'HLS';
+return this.httpGet(embedUrl).then(embedHtml => {
 
-const title =
-  html.match(/<title>(.*?)<\/title>/i)?.[1]?.replace(' - Porntrex', '') ||
-  'Porntrex Video';
+  const hlsMatch = embedHtml.match(/(https:[^"]+\.m3u8[^"]*)/);
 
-const metaResponse = new meta.MetaResponse(
-  id,
-  'movie',
-  title,
-  {
-    description: title
+  if (!hlsMatch) {
+    logger.warn('Porntrex: HLS stream not found');
+    return {};
   }
-);
 
-return {
-  metaResponse,
-  video_alt_url5,
-  video_alt_url4,
-  video_alt_url3,
-  video_alt_url2,
-  video_alt_url,
-  video_alt_url5_text,
-  video_alt_url4_text,
-  video_alt_url3_text,
-  video_alt_url2_text,
-  video_alt_url_text
-};
+  const video_alt_url = hlsMatch[1];
+  const video_alt_url_text = 'HLS';
+
+  const title =
+    html.match(/<title>(.*?)<\/title>/i)?.[1]?.replace(' - Porntrex', '') ||
+    'Porntrex Video';
+
+  const metaResponse = new meta.MetaResponse(
+    id,
+    'movie',
+    title,
+    { description: title }
+  );
+
+  return {
+    metaResponse,
+    video_alt_url,
+    video_alt_url_text
+  };
+});
 }
 
 }
