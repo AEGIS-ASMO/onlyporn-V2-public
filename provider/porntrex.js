@@ -176,19 +176,26 @@ class PorntrexProvider extends Provider {
         }
       );
 
-      return {
-        metaResponse,
-        video_alt_url5,
-        video_alt_url4,
-        video_alt_url3,
-        video_alt_url2,
-        video_alt_url,
-        video_alt_url5_text,
-        video_alt_url4_text,
-        video_alt_url3_text,
-        video_alt_url2_text,
-        video_alt_url_text
-      };
+      this.dataset[id] = {
+  video_alt_url5,
+  video_alt_url4,
+  video_alt_url3,
+  video_alt_url2,
+  video_alt_url,
+  video_alt_url5_text,
+  video_alt_url4_text,
+  video_alt_url3_text,
+  video_alt_url2_text,
+  video_alt_url_text
+};
+
+this.metas[id] = {
+  metaResponse
+};
+
+return {
+  metaResponse
+};
 
     } catch (e) {
       logger.error({ e }, 'Porntrex flashvars parse error');
@@ -278,8 +285,7 @@ const metaResponse = new meta.MetaResponse(
   }
 );
 
-const result = {
-  metaResponse,
+this.dataset[id] = {
   video_alt_url5,
   video_alt_url4,
   video_alt_url3,
@@ -290,6 +296,10 @@ const result = {
   video_alt_url3_text,
   video_alt_url2_text,
   video_alt_url_text
+};
+
+const result = {
+  metaResponse
 };
 
 this.metas[id] = result;
