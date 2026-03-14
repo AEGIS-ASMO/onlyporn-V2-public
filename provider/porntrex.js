@@ -85,11 +85,6 @@ class PorntrexProvider extends Provider {
     return [];
   }
 
-  if (!data) {
-  logger.warn("Porntrex: stream data missing");
-  return [];
-}
-
 const qualities = Object.keys(data).filter(
     k => k.startsWith('video_alt_url') && !k.endsWith('_text')
   );
@@ -209,7 +204,7 @@ return {
 
   // ---- METHOD 2 : EMBED PLAYER ----
 
-const idMatch = id.match(/\/(\d+)/);
+const idMatch = id.match(/\/video\/([^/]+)/);
 
 if (!idMatch) {
   logger.warn('Porntrex: video id not found');
@@ -223,13 +218,16 @@ if (!idMatch) {
 };
 }
 
-const videoId = idMatch[1];
+const videoId = idMatch[1].split('-')[0];
 
 const embedUrl = `${this.baseUrl}embed/${videoId}`;
 
 logger.debug({ embedUrl }, 'Porntrex loading embed');
 
 const embedHtml = await this.fetchHtml(embedUrl);
+
+// DEBUG: inspect embed HTML
+logger.debug(embedHtml.substring(0, 1000), 'Porntrex embed HTML');
 
 const jsonMatch =
   embedHtml.match(/flashvars\s*=\s*(\{[\s\S]*?\});/i) ||
@@ -289,7 +287,9 @@ const metaResponse = new meta.MetaResponse(
   title,
   {
     description: title,
-    poster: html.match(/poster="([^"]+)"/)?.[1]
+    poster: html.match(/poster="([^"]+)"/)?.[1]?.startsWith('http')
+  ? html.match(/poster="([^"]+)"/)?.[1]
+  : 'https:' + html.match(/poster="([^"]+)"/)?.[1]
   }
 );
 
