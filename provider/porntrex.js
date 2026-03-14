@@ -162,7 +162,9 @@ class PorntrexProvider extends Provider {
         video_title || 'Porntrex Video',
         {
           genres: video_categories ? video_categories.split(',') : [],
-          background: preview_url?.startsWith('http')
+          background: preview_url
+  ? (preview_url.startsWith('http') ? preview_url : 'https:' + preview_url)
+  : null
             ? preview_url
             : 'https:' + preview_url,
           description: video_title
