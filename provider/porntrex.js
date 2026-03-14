@@ -104,12 +104,6 @@ class PorntrexProvider extends Provider {
     return streams;
   }
 
-  return [];
-}
-
-    return Promise.resolve({ streams: [] });
-  }
-
   fixLooseJson(looseJsonString) {
 
     let jsonString = looseJsonString
