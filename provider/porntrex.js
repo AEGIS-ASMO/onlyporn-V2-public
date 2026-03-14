@@ -204,7 +204,7 @@ return {
 
   // ---- METHOD 2 : EMBED PLAYER ----
 
-const idMatch = id.match(/\/video\/(\d+)/);
+const idMatch = id.match(/\/video\/(\d+)/i);
 
 if (!idMatch) {
   logger.warn('Porntrex: video id not found');
@@ -246,7 +246,7 @@ if (!jsonMatch) {
 let data;
 
 try {
-  const cleaned = this.fixLooseJson(jsonMatch[1]);
+  const cleaned = this.fixLooseJson(jsonMatch[0]);
   data = JSON.parse(cleaned);
 } catch (e) {
   logger.error({ e }, 'Porntrex embed JSON parse error');
