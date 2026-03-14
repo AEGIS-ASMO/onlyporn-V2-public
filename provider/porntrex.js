@@ -250,7 +250,7 @@ const metaResponse = new meta.MetaResponse(
 );
 
 return {
-  metaResponse,
+  meta: metaResponse.meta,
   video_alt_url5,
   video_alt_url4,
   video_alt_url3,
