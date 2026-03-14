@@ -137,14 +137,20 @@ class Provider {
   }
 
   async getMetadata(args) {
-    logger.info({ args }, 'getMetadata');
+  logger.info({ args }, 'getMetadata');
 
-    const { id } = args;
+  const { id } = args;
 
-    return this.fetchHtml(id).then(html =>
-      this.parseVideoPage({ id, html })
-    );
+  const result = await this.fetchHtml(id)
+    .then(html => this.parseVideoPage({ id, html }));
+
+  // Support both return formats
+  if (result && result.metaResponse) {
+    return result.metaResponse;
   }
+
+  return result;
+}
 
   async handleStream(args) {
     const { id } = args;
