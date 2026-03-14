@@ -94,13 +94,18 @@ class PorntrexProvider extends Provider {
         .filter(key => meta.hasOwnProperty(key) && meta[key])
         .map(key => {
           return {
-            url: meta[key].startsWith('http')
-  ? meta[key]
-  : 'https://' + meta[key],
-            name: meta[key + '_text'],
-            type: Provider.TYPE,
-          };
-        });
+  url: meta[key].startsWith('http')
+    ? meta[key]
+    : 'https:' + meta[key],
+  name: meta[key + '_text'],
+  type: Provider.TYPE,
+  behaviorHints: {
+    notWebReady: true,
+    headers: {
+      referer: 'https://porntrex.com/'
+    }
+  }
+};
 
       logger.debug({ streams }, 'streams %d', streams.length);
 
