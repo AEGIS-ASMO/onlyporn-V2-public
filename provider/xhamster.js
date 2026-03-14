@@ -98,13 +98,18 @@ class XhamsterProvider extends Provider {
 
   async getMetadata(args) {
 
-    logger.debug({ args }, 'getMetadata');
+  logger.debug({ args }, 'getMetadata');
 
-    const { id } = args;
+  let { id } = args;
 
-    return this.fetchHtml(id)
-      .then(html => this.parseVideoPage({ id, html }));
+  // Fix: ensure id is a full URL
+  if (!id.startsWith('http')) {
+    id = this.baseUrl + id;
   }
+
+  return this.fetchHtml(id)
+    .then(html => this.parseVideoPage({ id, html }));
+}
 
   parseVideoPage({ id, html }) {
 
