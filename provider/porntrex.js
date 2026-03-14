@@ -75,34 +75,39 @@ class PorntrexProvider extends Provider {
   }
 
   async getStreams(meta) {
-  if (meta) {
 
-    const qualities = [
-      'video_alt_url5',
-      'video_alt_url4',
-      'video_alt_url3',
-      'video_alt_url2',
-      'video_alt_url',
-    ];
-
-    const streams = qualities
-      .filter(key => meta.hasOwnProperty(key) && meta[key])
-      .map(key => ({
-        url: meta[key].startsWith('http')
-          ? meta[key]
-          : 'https:' + meta[key],
-        name: meta[key + '_text'],
-        type: Provider.TYPE,
-        behaviorHints: {
-          notWebReady: true,
-          headers: {
-            referer: 'https://porntrex.com/'
-          }
-        }
-      }));
-
-    return streams;
+  if (!meta) {
+    return [];
   }
+
+  const qualities = [
+    'video_alt_url5',
+    'video_alt_url4',
+    'video_alt_url3',
+    'video_alt_url2',
+    'video_alt_url',
+  ];
+
+  const streams = qualities
+    .filter(key => meta[key])
+    .map(key => ({
+      url: meta[key].startsWith('http')
+        ? meta[key]
+        : 'https:' + meta[key],
+      name: meta[key + '_text'] || key,
+      type: Provider.TYPE,
+      behaviorHints: {
+        notWebReady: true,
+        headers: {
+          referer: 'https://porntrex.com/'
+        }
+      }
+    }));
+
+  logger.debug({ streams }, 'streams %d', streams.length);
+
+  return streams;
+}
 
   fixLooseJson(looseJsonString) {
 
