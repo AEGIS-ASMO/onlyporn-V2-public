@@ -80,13 +80,10 @@ class PorntrexProvider extends Provider {
     return [];
   }
 
-  const qualities = [
-    'video_alt_url5',
-    'video_alt_url4',
-    'video_alt_url3',
-    'video_alt_url2',
-    'video_alt_url',
-  ];
+  // detect any video_alt_url keys dynamically
+  const qualities = Object.keys(meta).filter(k =>
+    k.startsWith('video_alt_url')
+  );
 
   const streams = qualities
     .filter(key => meta[key])
