@@ -194,31 +194,56 @@ class PorntrexProvider extends Provider {
   }
 
   // ---- METHOD 2 : NEW PLAYER ----
-  const playerMatch = html.match(/kt_player\([^,]+,[^,]+,["'](\d+)["']/);
+const playerMatch = html.match(/kt_player\([^,]+,[^,]+,["'](\d+)["']/);
 
-  if (!playerMatch) {
-    logger.warn('Porntrex: player config not found');
-    return {};
+if (!playerMatch) {
+  logger.warn('Porntrex: player config not found');
+  return {};
+}
+
+const videoId = playerMatch[1];
+
+// modern CDN streams
+const base = `https://ptx.cdntrex.com/get_file/3/${videoId}`;
+
+const video_alt_url5 = `${base}/1080p.mp4`;
+const video_alt_url4 = `${base}/720p.mp4`;
+const video_alt_url3 = `${base}/480p.mp4`;
+const video_alt_url2 = `${base}/360p.mp4`;
+const video_alt_url = `${base}/playlist.m3u8`;
+
+const video_alt_url5_text = '1080p';
+const video_alt_url4_text = '720p';
+const video_alt_url3_text = '480p';
+const video_alt_url2_text = '360p';
+const video_alt_url_text = 'HLS';
+
+const title =
+  html.match(/<title>(.*?)<\/title>/i)?.[1]?.replace(' - Porntrex', '') ||
+  'Porntrex Video';
+
+const metaResponse = new meta.MetaResponse(
+  id,
+  'movie',
+  title,
+  {
+    description: title
   }
+);
 
-  const videoId = playerMatch[1];
-
-  const hls = `https://ptx.cdntrex.com/get_file/3/${videoId}/playlist.m3u8`;
-
-  const metaResponse = new meta.MetaResponse(
-    id,
-    'movie',
-    'Porntrex Video',
-    {
-      description: 'Porntrex stream'
-    }
-  );
-
-  return {
-    metaResponse,
-    video_alt_url: hls,
-    video_alt_url_text: 'HLS'
-  };
+return {
+  metaResponse,
+  video_alt_url5,
+  video_alt_url4,
+  video_alt_url3,
+  video_alt_url2,
+  video_alt_url,
+  video_alt_url5_text,
+  video_alt_url4_text,
+  video_alt_url3_text,
+  video_alt_url2_text,
+  video_alt_url_text
+};
 }
 
 }
