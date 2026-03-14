@@ -185,5 +185,6 @@ selectSources(sources) {
 
   return { streams: [] };
 }
+}
 
 module.exports = EpornerProvider.create;
