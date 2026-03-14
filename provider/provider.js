@@ -160,10 +160,11 @@ class Provider {
   }
 
   async processStreams({ id }) {
-    return this.fetchHtml(id)
-      .then(html => this.parseVideoPage({ id, html }))
-      .then(meta => this.getStreams(meta));
-  }
+  const html = await this.fetchHtml(id);
+  const meta = await this.parseVideoPage({ id, html });
+
+  return this.getStreams(meta);
+}
 
   getStreams(meta) {
     return this.fetchHtml(meta.videoPageUrl)
