@@ -78,14 +78,16 @@ class PorntrexProvider extends Provider {
 
   if (!meta) return [];
 
-  const data = this.dataset[meta.id];
+  const id = meta.id || meta.metaResponse?.id;
+
+  const data = this.dataset[id];
 
   if (!data) {
-    logger.warn({ id: meta.id }, 'Porntrex streams dataset missing');
+    logger.warn({ id }, 'Porntrex streams dataset missing');
     return [];
   }
 
-const qualities = Object.keys(data).filter(
+  const qualities = Object.keys(data).filter(
     k => k.startsWith('video_alt_url') && !k.endsWith('_text')
   );
 
@@ -107,7 +109,7 @@ const qualities = Object.keys(data).filter(
 
   logger.debug({ streams }, 'streams %d', streams.length);
 
-  return streams;
+  return { streams };
 }
 
   fixLooseJson(looseJsonString) {
