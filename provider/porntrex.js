@@ -165,8 +165,6 @@ class PorntrexProvider extends Provider {
           background: preview_url
   ? (preview_url.startsWith('http') ? preview_url : 'https:' + preview_url)
   : null,
-            ? preview_url
-            : 'https:' + preview_url,
           description: video_title
         }
       );
