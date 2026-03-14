@@ -125,61 +125,68 @@ class PorntrexProvider extends Provider {
 
   parseVideoPage({ id, html }) {
 
-    const regex = /flashvars\s*=\s*(\{[^;]*\});/;
+  const regex = /flashvars\s*=\s*(\{[\s\S]*?\});/i;
 
-    let match = html.match(regex);
+  const match = html.match(regex);
 
-    if (match && match[1]) {
+  if (!match || !match[1]) {
+    return {};
+  }
 
-      const cleaned = this.fixLooseJson(
-        match[1]
-          .replaceAll('https://', '')
-          .replace(';', '')
-          .trim(),
-      );
+  try {
 
-      const {
-        video_title,
-        video_categories,
-        preview_url,
-        video_alt_url5,
-        video_alt_url4,
-        video_alt_url3,
-        video_alt_url2,
-        video_alt_url,
-        video_alt_url5_text,
-        video_alt_url4_text,
-        video_alt_url3_text,
-        video_alt_url2_text,
-        video_alt_url_text,
-      } = JSON.parse(cleaned);
+    const cleaned = this.fixLooseJson(
+      match[1]
+        .replace(/https?:\/\//g, '')
+        .replace(/;$/, '')
+        .trim()
+    );
 
-      const metaResponse = new meta.MetaResponse(
-        id,
-        'movie',
-        video_title,
-        {
-          genres: video_categories.split(','),
-          background: 'https:' + preview_url,
-          description: video_title,
-        },
-      );
+    const data = JSON.parse(cleaned);
 
-      return {
-        metaResponse,
-        video_alt_url5,
-        video_alt_url4,
-        video_alt_url3,
-        video_alt_url2,
-        video_alt_url,
-        video_alt_url5_text,
-        video_alt_url4_text,
-        video_alt_url3_text,
-        video_alt_url2_text,
-        video_alt_url_text,
-      };
-    }
+    const {
+      video_title,
+      video_categories,
+      preview_url,
+      video_alt_url5,
+      video_alt_url4,
+      video_alt_url3,
+      video_alt_url2,
+      video_alt_url,
+      video_alt_url5_text,
+      video_alt_url4_text,
+      video_alt_url3_text,
+      video_alt_url2_text,
+      video_alt_url_text
+    } = data;
 
+    const metaResponse = new meta.MetaResponse(
+      id,
+      'movie',
+      video_title,
+      {
+        genres: video_categories ? video_categories.split(',') : [],
+        background: preview_url ? 'https:' + preview_url : '',
+        description: video_title
+      }
+    );
+
+    return {
+      metaResponse,
+      video_alt_url5,
+      video_alt_url4,
+      video_alt_url3,
+      video_alt_url2,
+      video_alt_url,
+      video_alt_url5_text,
+      video_alt_url4_text,
+      video_alt_url3_text,
+      video_alt_url2_text,
+      video_alt_url_text
+    };
+
+  } catch (e) {
+    logger.error({ e }, 'Porntrex parse error');
     return {};
   }
 }
