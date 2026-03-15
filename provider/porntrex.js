@@ -71,44 +71,6 @@ class PorntrexProvider extends Provider {
     return metas;
   }
 
-    const id = meta.metaResponse?.id || meta.id;
-
-    const data = this.dataset[id];
-
-    if (!data) {
-      logger.warn({ id }, 'Porntrex streams dataset missing');
-      return { streams: [] };
-    }
-
-    const qualities = Object.keys(data)
-      .filter(k =>
-        (k.startsWith('video_alt_url') || k.startsWith('video_url')) &&
-        !k.endsWith('_text')
-      )
-      .sort()
-      .reverse();
-
-    const streams = qualities
-      .filter(key => data[key])
-      .map(key => ({
-        url: data[key].startsWith('http')
-          ? data[key]
-          : 'https:' + data[key],
-        name: data[key + '_text'] || key,
-        type: Provider.TYPE,
-        behaviorHints: {
-          notWebReady: true,
-          headers: {
-            referer: 'https://porntrex.com/'
-          }
-        }
-      }));
-
-    logger.debug({ streams }, 'streams %d', streams.length);
-
-    return { streams };
-  }
-
   fixLooseJson(looseJsonString) {
 
     let jsonString = looseJsonString
@@ -131,15 +93,10 @@ class PorntrexProvider extends Provider {
       return this.metas[id];
     }
 
-    if (this.dataset[id]) {
-      logger.debug({ id }, 'Porntrex dataset cache hit');
-      return this.metas[id];
-    }
-
     // METHOD 1 : FLASHVARS
 
     let match =
-      html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?video_alt_url[\s\S]*?\})/i) ||
+      html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?(video_alt_url|video_url)[\s\S]*?\})/i) ||
       html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?\})\s*,\s*\w+/i);
 
     if (match) {
@@ -150,6 +107,17 @@ class PorntrexProvider extends Provider {
         );
 
         const data = JSON.parse(cleaned);
+        
+        let videoPageUrl =
+  data.video_url_hd ||
+  data.video_alt_url ||
+  data.video_alt_url2 ||
+  data.video_url ||
+  null;
+  
+if (videoPageUrl && videoPageUrl.startsWith('//')) {
+  videoPageUrl = 'https:' + videoPageUrl;
+}
 
         const {
           video_title,
@@ -170,9 +138,10 @@ class PorntrexProvider extends Provider {
           }
         );
 
-        this.dataset[id] = data;
-
-        const result = { metaResponse };
+        const result = {
+  metaResponse,
+  videoPageUrl
+};
 
         this.metas[id] = result;
 
@@ -207,10 +176,19 @@ class PorntrexProvider extends Provider {
 
     const embedHtml = await this.fetchHtml(embedUrl);
 
-logger.debug(embedHtml.substring(0, 1000), 'Porntrex embed HTML');
-
-// Fallback: extract direct MP4 source
 let videoPageUrl = null;
+
+const mp4Match = embedHtml.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/gi);
+
+if (mp4Match && mp4Match.length) {
+  videoPageUrl = mp4Match.sort((a, b) => {
+    const qa = parseInt(a.match(/(\d{3,4})p/)?.[1] || 0);
+    const qb = parseInt(b.match(/(\d{3,4})p/)?.[1] || 0);
+    return qb - qa;
+  })[0];
+}
+
+logger.debug(embedHtml.substring(0, 1000), 'Porntrex embed HTML');
 
 const source = embedHtml.match(/<source[^>]+src="([^"]+\.mp4[^"]*)"/i);
 
@@ -226,8 +204,14 @@ if (source) {
   }
 }
 
+const m3u8Match = embedHtml.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
+
+if (!videoPageUrl && m3u8Match) {
+  videoPageUrl = m3u8Match[0];
+}
+
 // Try to extract player JSON
-const jsonMatch = embedHtml.match(\{[\s\S]*?(video_alt_url|video_url)[\s\S]*?\});
+const jsonMatch = embedHtml.match(/(\{[\s\S]*?(video_alt_url|video_url)[\s\S]*?\})/);
 
     if (!jsonMatch && videoPageUrl) {
   logger.debug('Porntrex using MP4 fallback');
@@ -243,6 +227,19 @@ const jsonMatch = embedHtml.match(\{[\s\S]*?(video_alt_url|video_url)[\s\S]*?\})
   };
 }
 
+if (!jsonMatch) {
+  logger.warn('Porntrex JSON not found');
+
+  return {
+    metaResponse: new meta.MetaResponse(
+      id,
+      'movie',
+      'Porntrex Video',
+      { description: 'Porntrex Video' }
+    ),
+    videoPageUrl
+  };
+}
     let data;
 
     try {
@@ -281,9 +278,7 @@ const metaResponse = new meta.MetaResponse(
     description,
     poster
   }
-);
-
-    this.dataset[id] = data;
+); 
 
     const result = { 
   metaResponse,
