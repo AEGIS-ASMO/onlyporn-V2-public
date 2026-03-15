@@ -231,8 +231,6 @@ if (source) {
 // Try to extract player JSON
 const jsonMatch = embedHtml.match(/(\{[\s\S]*?video_alt_url[\s\S]*?\})/);
 
-    const jsonMatch = embedHtml.match(/(\{[\s\S]*?video_alt_url[\s\S]*?\})/);
-
     if (!jsonMatch) {
       logger.warn('Porntrex: player json not found');
       return {
