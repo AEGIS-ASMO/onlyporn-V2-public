@@ -33,8 +33,8 @@ class XvideosProvider extends Provider {
   handlePagination(url, { extra: { skip, search } }) {
 
   if (search) {
-    this.limit = 25;
-  }
+  return `${url}${prefix}p=${Math.floor(skip / 25)}`;
+}
 
   const prefix = url.includes('?') ? '&' : '?';
 
@@ -90,6 +90,8 @@ class XvideosProvider extends Provider {
   }
 
   parseVideoPage({ id, html }) {
+  
+logger.debug({ videoPageUrl }, 'XVideos extracted video URL');
 
     const $ = load(html);
 
@@ -116,21 +118,21 @@ class XvideosProvider extends Provider {
 
     let match = html.match(regexVideoHLS);
     if (match && match[1]) {
-      videoPageUrl = match[1];
-    }
+  videoPageUrl = match[1].replace(/\\\//g, '/');
+}
 
     if (!videoPageUrl) {
       match = html.match(regexVideoHigh);
       if (match && match[1]) {
-        videoPageUrl = match[1];
-      }
+  videoPageUrl = match[1].replace(/\\\//g, '/');
+}
     }
 
     if (!videoPageUrl) {
       match = html.match(regexVideoLow);
       if (match && match[1]) {
-        videoPageUrl = match[1];
-      }
+  videoPageUrl = match[1].replace(/\\\//g, '/');
+}
     }
 
     match = html.match(regexThumbnail);
@@ -169,17 +171,17 @@ class XvideosProvider extends Provider {
 
   async processStreams({ id }) {
 
-    return this.fetchHtml(id).then(async html => {
+  const html = await this.fetchHtml(id);
 
-        const metaData = this.parseVideoPage({ id, html });
+  const metaData = this.parseVideoPage({ id, html });
 
-logger.debug({ videoPageUrl: metaData.videoPageUrl }, 'XVideos stream source');
+  logger.debug({ videoPageUrl: metaData.videoPageUrl }, 'XVideos stream source');
 
-        let streamsResponse = await super.getStreams(metaData);
+  let streamsResponse = await super.getStreams(metaData);
 
-        if (streamsResponse && streamsResponse.streams.length > 0) {
-          return streamsResponse;
-        }
+  if (streamsResponse?.streams?.length) {
+    return streamsResponse;
+  }
 
         const $ = load(html);
 
