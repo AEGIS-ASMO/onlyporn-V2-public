@@ -11,7 +11,6 @@ class Provider {
   static LIMIT = 50;
   static TYPE = 'movie';
 
-  // removed external transport dependency
   static TRANSPORT_URL = '';
 
   constructor(baseUrl, name, limit) {
@@ -28,7 +27,7 @@ class Provider {
     return catalogId.indexOf(this.getName()) !== -1;
   }
 
-  getInitialUrl(catalogId) {
+  getInitialUrl() {
     return this.baseUrl;
   }
 
@@ -37,35 +36,44 @@ class Provider {
   }
 
   async fetchHtml(url) {
-  console.info('fetching url', url);
-  try {
-    const response = await client.get(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
-        "Accept":
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": this.baseUrl,
-        "Origin": this.baseUrl,
-        "Connection": "keep-alive"
-      },
-      timeout: 15000
-    });
+    console.info('fetching url', url);
 
-    return response.data;
-  } catch (error) {
-    console.error(error);
-    return '';
+    try {
+      const response = await client.get(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
+          "Accept":
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Referer": this.baseUrl,
+          "Origin": this.baseUrl,
+          "Connection": "keep-alive"
+        },
+        timeout: 15000
+      });
+
+      return response.data;
+
+    } catch (error) {
+      console.error(error);
+      return '';
+    }
   }
-}
+
+  cleanUrl(url) {
+    if (!url) return url;
+
+    return url
+      .replace(/\\\//g, '/')
+      .replace(/\\u0026/g, '&')
+      .replace(/&amp;/g, '&');
+  }
 
   page(skip) {
     if (skip) {
       const page = Math.ceil((skip || 0) / this.limit);
-      if (page === 0) {
-        return '';
-      }
+      if (page === 0) return '';
       return `${page}`;
     }
     return '';
@@ -83,24 +91,24 @@ class Provider {
     return `?skip=${skip}`;
   }
 
-  getCatalogMetas(html) {
+  getCatalogMetas() {
     return [];
   }
 
   getAnalyticEvent(event, id) {
-    if (id) {
-      return `${event}-${id}`;
-    }
+    if (id) return `${event}-${id}`;
     return `${event}-${this.getName()}`;
   }
 
   async handleCatalog(args) {
     if (args.type === Provider.TYPE && this.activate(args.id)) {
+
       logger.info({ args }, 'handleCatalog');
 
       let url = this.getInitialUrl(args.id);
 
       if (args.extra) {
+
         if (args.extra.search) {
           url = this.handleSearch(args);
         }
@@ -108,6 +116,7 @@ class Provider {
         if (args.extra.genre) {
           url = this.handleGenre(args);
         }
+
       }
 
       if (args.extra.skip) {
@@ -119,40 +128,40 @@ class Provider {
 
       logger.debug({ metasSize: metas.length }, 'catalog');
 
-      return Promise.resolve({ metas });
-    } else {
-      return Promise.resolve({ metas: [] });
+      return { metas };
     }
+
+    return { metas: [] };
   }
 
   async handleMeta(args) {
-    if (args.type === Provider.TYPE && this.activate(args.id)) {
 
-      return this.getMetadata(args).then(meta => {
-        return { meta };
-      });
+    if (args.type === Provider.TYPE && this.activate(args.id)) {
+      const meta = await this.getMetadata(args);
+      return { meta };
     }
 
-    return Promise.resolve({ meta: {} });
+    return { meta: {} };
   }
 
   async getMetadata(args) {
-  logger.info({ args }, 'getMetadata');
 
-  const { id } = args;
+    logger.info({ args }, 'getMetadata');
 
-  const result = await this.fetchHtml(id)
-    .then(html => this.parseVideoPage({ id, html }));
+    const { id } = args;
 
-  // Support both return formats
-  if (result && result.metaResponse) {
-    return result.metaResponse;
+    const result = await this.fetchHtml(id)
+      .then(html => this.parseVideoPage({ id, html }));
+
+    if (result && result.metaResponse) {
+      return result.metaResponse;
+    }
+
+    return result;
   }
 
-  return result;
-}
-
   async handleStream(args) {
+
     const { id } = args;
 
     if (args.type === Provider.TYPE && this.activate(id)) {
@@ -162,97 +171,149 @@ class Provider {
       return this.processStreams(args);
     }
 
-    return Promise.resolve({ streams: [] });
+    return { streams: [] };
   }
 
   async processStreams({ id }) {
-  const html = await this.fetchHtml(id);
-  const meta = await this.parseVideoPage({ id, html });
 
-  return this.getStreams(meta);
-}
+    const html = await this.fetchHtml(id);
+
+    const hls = html.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
+    if (hls) {
+      return this.getStreams({ videoPageUrl: this.cleanUrl(hls[0]) });
+    }
+
+    const dash = html.match(/https?:\/\/[^\s"'<>]+\.mpd[^\s"'<>]*/i);
+    if (dash) {
+      return {
+        streams: [{
+          type: 'movie',
+          url: this.cleanUrl(dash[0]),
+          name: 'DASH'
+        }]
+      };
+    }
+
+    const mp4 = html.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
+    if (mp4) {
+      return {
+        streams: [{
+          type: 'movie',
+          url: this.cleanUrl(mp4[0]),
+          name: 'HD'
+        }]
+      };
+    }
+
+    const meta = await this.parseVideoPage({ id, html });
+
+    return this.getStreams(meta);
+  }
 
   getStreams(meta) {
 
-  if (!meta.videoPageUrl) {
-    return Promise.resolve({ streams: [] });
-  }
+    if (!meta.videoPageUrl) {
+      return Promise.resolve({ streams: [] });
+    }
 
-  // if direct mp4
-  if (meta.videoPageUrl.endsWith(".mp4")) {
-    return Promise.resolve({
-      streams: [{
-        type: 'movie',
-        url: meta.videoPageUrl,
-        name: 'HD'
-      }]
-    });
-  }
+    if (meta.videoPageUrl.endsWith(".mp4")) {
+      return Promise.resolve({
+        streams: [{
+          type: 'movie',
+          url: meta.videoPageUrl,
+          name: 'HD'
+        }]
+      });
+    }
 
-  return this.fetchHtml(meta.videoPageUrl)
-    .then(content => {
-      if (content.includes("#EXTM3U")) {
-        return this.parseM3u8(content);
-      }
-      return [];
-    })
+    return this.fetchHtml(meta.videoPageUrl)
+
+      .then(content => {
+
+        if (content.includes("#EXTM3U")) {
+          return this.parseM3u8(content);
+        }
+
+        return [];
+
+      })
+
       .then(streams =>
         streams.map(stream =>
           this.transformStream(meta.videoPageUrl, stream)
         )
       )
-      .then(streams => {
-        return { streams };
-      });
+
+      .then(streams => ({ streams }));
   }
 
-  transformStream(url, stream) {
-    return stream;
+  transformStream(baseUrl, stream) {
+
+    if (!stream.url) return stream;
+
+    if (stream.url.startsWith('http')) {
+      return stream;
+    }
+
+    const base = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+
+    return {
+      ...stream,
+      url: base + stream.url
+    };
   }
 
   parseM3u8(content) {
+
     const streams = [];
 
     const parser = new m3u8.Parser();
+
     parser.push(content);
     parser.end();
 
     try {
+
       parser.manifest.playlists.forEach(playlist => {
+
+        const height =
+          playlist.attributes?.RESOLUTION?.height || 'auto';
+
         streams.push({
-          resolution: playlist.attributes.RESOLUTION.height + 'p',
-          uri: playlist.uri,
+          resolution: height + 'p',
+          url: playlist.uri
         });
+
       });
 
       streams.sort(
         (a, b) =>
-          parseInt(b.resolution.split('p')[0]) -
-          parseInt(a.resolution.split('p')[0])
+          parseInt(b.resolution) -
+          parseInt(a.resolution)
       );
 
       logger.debug({ streams }, 'streams', streams.length);
 
-      return streams.map(stream => {
-        return {
-          type: 'movie',
-          url: stream.uri,
-          name: stream.resolution,
-        };
-      });
+      return streams.map(stream => ({
+        type: 'movie',
+        url: stream.url,
+        name: stream.resolution
+      }));
+
     } catch (e) {
+
       console.error('parseM3u8 error', e);
+
       return streams;
     }
   }
 
-  parseVideoPage(args) {
+  parseVideoPage() {
     return {};
   }
 
-  track(a1, a2) {
-    // track(a1, a2)
-  }
+  track() {}
+
 }
 
 module.exports = Provider;
