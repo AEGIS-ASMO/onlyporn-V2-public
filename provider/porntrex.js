@@ -39,46 +39,52 @@ class PorntrexProvider extends Provider {
   }
 
   getCatalogMetas(html) {
-    const metas = [];
-    const $ = load(html);
+  const metas = [];
+  const $ = load(html);
 
-    $('div.video-holder').each((i, el) => {
+  $('div.video-holder, div.video-item, div.thumb, div.item, div.video').each((i, el) => {
 
-      const $a = $(el).find('a').first();
-      const href = $a.attr('href');
+    const $a = $(el).find('a').first();
+    const href = $a.attr('href');
 
-      if (!href) return;
+    if (!href || !href.includes('/video/')) return;
 
-      const videoPageUrl = href.startsWith('http')
-        ? href
-        : this.baseUrl.replace(/\/$/, '') + href;
+    const videoPageUrl = href.startsWith('http')
+      ? href
+      : this.baseUrl.replace(/\/$/, '') + href;
 
-      const $img = $a.find('img');
+    const $img = $a.find('img');
 
-      const poster =
-        $img.attr('data-src') ||
-        $img.attr('data-original') ||
-        $img.attr('src');
+    let poster =
+      $img.attr('data-src') ||
+      $img.attr('data-original') ||
+      $img.attr('data-lazy-src') ||
+      $img.attr('src');
 
-      const title =
-        $img.attr('alt') ||
-        $a.attr('title');
+    if (poster && poster.startsWith('//')) {
+      poster = 'https:' + poster;
+    }
 
-      if (!title) return;
+    const title =
+      $img.attr('alt') ||
+      $a.attr('title') ||
+      $a.text().trim();
 
-      metas.push(
-        new meta.MetaPreview(
-          videoPageUrl,
-          'movie',
-          title,
-          poster?.startsWith('http') ? poster : 'https:' + poster
-        )
-      );
+    if (!title) return;
 
-    });
+    metas.push(
+      new meta.MetaPreview(
+        videoPageUrl,
+        'movie',
+        title,
+        poster
+      )
+    );
 
-    return metas;
-  }
+  });
+
+  return metas;
+}
 
   fixLooseJson(looseJsonString) {
 
