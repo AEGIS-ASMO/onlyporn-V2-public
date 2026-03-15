@@ -35,7 +35,7 @@ class PorntrexProvider extends Provider {
 
   handlePagination(url, { extra: { skip } }) {
   const page = this.page(skip);
-  return `${page}/`;
+  return `page/${page}/`;
 }
 
   getCatalogMetas(html) {
@@ -201,7 +201,7 @@ if (streamMatch && streamMatch.length) {
 
 logger.debug(embedHtml.substring(0, 1000), 'Porntrex embed HTML');
 
-const source = embedHtml.match(/<source[^>]+src="([^"]+\.mp4[^"]*)"/i);
+const source = embedHtml.match(/<source[^>]+src=["']([^"']+\.mp4[^"']*)["']/i);
 
 if (source) {
   const src = source[1];
@@ -238,15 +238,28 @@ const jsonMatch = embedHtml.match(/(\{[\s\S]*?(video_alt_url|video_url)[\s\S]*?\
   };
 }
 
-if (!jsonMatch) {
-  logger.warn('Porntrex JSON not found');
+if (!jsonMatch && videoPageUrl) {
+  logger.debug('Porntrex using stream fallback');
+
+  const $ = load(html);
+
+  const title =
+    $('meta[property="og:title"]').attr('content') ||
+    $('title').text().replace(/\s*-\s*Porntrex/i, '').trim() ||
+    'Porntrex Video';
+
+  const description =
+    $('meta[name="description"]').attr('content') || title;
+
+  const poster =
+    $('meta[property="og:image"]').attr('content') || null;
 
   return {
     metaResponse: new meta.MetaResponse(
       id,
       'movie',
-      'Porntrex Video',
-      { description: 'Porntrex Video' }
+      title,
+      { description, poster }
     ),
     videoPageUrl
   };
