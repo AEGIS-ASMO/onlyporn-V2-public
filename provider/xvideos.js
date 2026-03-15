@@ -69,16 +69,17 @@ class XvideosProvider extends Provider {
       }
 
       if (parsedMeta['href']) {
-        const id = new URL(parsedMeta['href'], this.baseUrl).href;
+  const id = new URL(parsedMeta['href'], this.baseUrl).href;
 
-        new meta.MetaPreview(
-  id.replace('/THUMBNUM', ''),
-  Provider.TYPE,
-  parsedMeta['title'],
-  parsedMeta['data-src'] || parsedMeta['data-original'] || parsedMeta['src']
-)
-        );
-      }
+  metadatas.push(
+    new meta.MetaPreview(
+      id.replace('/THUMBNUM', ''),
+      Provider.TYPE,
+      parsedMeta['title'],
+      parsedMeta['data-src'] || parsedMeta['data-original'] || parsedMeta['src']
+    )
+  );
+}
     });
 
     return metadatas;
