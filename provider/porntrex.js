@@ -7,6 +7,7 @@ class PorntrexProvider extends Provider {
 
   constructor() {
     super('https://porntrex.com/', 'porntrex');
+    this.dataset = {};
     this.metas = {};
   }
 
@@ -24,8 +25,8 @@ class PorntrexProvider extends Provider {
     return catalogId.substring(this.getName().length + 1);
   }
 
-  handleSearch({ extra: { search } }) {
-    return `${this.baseUrl}search/${encodeURIComponent(search)}/`;
+  handleSearch({ extra: { search: keyword } }) {
+    return `${this.baseUrl}search/${encodeURIComponent(keyword)}/`;
   }
 
   handleGenre(args) {
@@ -33,41 +34,43 @@ class PorntrexProvider extends Provider {
   }
 
   handlePagination(url, { extra: { skip } }) {
-    const page = this.page(skip);
-    return `${url}page/${page}/`;
-  }
+  const page = this.page(skip);
+  return `${url}page/${page}/`;
+}
 
   getCatalogMetas(html) {
     const metas = [];
     const $ = load(html);
 
-    $('div.video-item').each((i, el) => {
+    $('div.video-item, div.thumb, div.item, div.video').each((index, element) => {
+      const $e = $(element);
+      const $a = $e.children('a');
 
-      const $el = $(el);
-      const a = $el.find('a').first();
+      const videoPageUrlRaw = $a.attr('href');
 
-      let url = a.attr('href');
-      if (url && !url.startsWith('http')) {
-        url = this.baseUrl.replace(/\/$/, '') + url;
-      }
+let videoPageUrl = videoPageUrlRaw;
 
-      const img = a.find('img');
+if (videoPageUrl && !videoPageUrl.startsWith('http')) {
+  videoPageUrl = this.baseUrl.replace(/\/$/, '') + videoPageUrl;
+}
+      const $img = $a.children('img');
 
       const poster =
-        img.attr('data-src') ||
-        img.attr('data-original') ||
-        img.attr('src');
+  $img.attr('data-src') ||
+  $img.attr('data-original') ||
+  $img.attr('data-lazy-src') ||
+  $img.attr('src');
 
-      const title = img.attr('alt');
+      const title = $img.attr('alt');
 
-      if (!url || !title) return;
+      if (!videoPageUrl || !title) return;
 
       metas.push(
         new meta.MetaPreview(
-          url,
+          videoPageUrl,
           'movie',
           title,
-          poster && poster.startsWith('//') ? 'https:' + poster : poster
+          poster?.startsWith('http') ? poster : 'https:' + poster
         )
       );
     });
@@ -75,85 +78,319 @@ class PorntrexProvider extends Provider {
     return metas;
   }
 
+  fixLooseJson(looseJsonString) {
+
+    let jsonString = looseJsonString
+      .trim()
+      .replace(/^"(.*)"$/, '$1');
+
+    jsonString = jsonString.replace(/'/g, '"');
+
+    jsonString = jsonString.replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":');
+
+    jsonString = jsonString.replace(/:\s*'([^']*)'/g, ': "$1"');
+
+    return jsonString;
+  }
+
   async parseVideoPage({ id, html }) {
 
     if (this.metas[id]) {
+      logger.debug({ id }, 'Porntrex cache hit');
       return this.metas[id];
     }
 
-    const $ = load(html);
+    // METHOD 1 : FLASHVARS
 
-    const title =
-      $('meta[property="og:title"]').attr('content') ||
-      $('title').text().replace(/\s*-\s*Porntrex/i, '').trim();
+    let match =
+      html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?(video_alt_url|video_url)[\s\S]*?\})/i) ||
+      html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?\})\s*,\s*\w+/i);
 
-    const description =
-      $('meta[name="description"]').attr('content') || title;
-
-    const poster =
-      $('meta[property="og:image"]').attr('content');
-
-    // ---- EXTRACT FLASHVARS ----
-
-    const flashvarsMatch =
-      html.match(/var\s+flashvars\s*=\s*(\{[\s\S]*?\});/i) ||
-      html.match(/flashvars\s*[:=]\s*(\{[\s\S]*?\})/i);
-
-    let videoPageUrl = null;
-
-    if (flashvarsMatch) {
-
+    if (match) {
       try {
 
-        let json = flashvarsMatch[1]
-          .replace(/(\w+):/g, '"$1":')
-          .replace(/'/g, '"');
+        const cleaned = this.fixLooseJson(
+          match[1].replace(/;$/, '').trim()
+        );
 
-        const data = JSON.parse(json);
+        const data = JSON.parse(cleaned);
+        
+        let videoPageUrl =
+  data.video_url_hd ||
+  data.video_alt_url ||
+  data.video_alt_url2 ||
+  data.video_url ||
+  null;
+  
+if (videoPageUrl && videoPageUrl.startsWith('//')) {
+  videoPageUrl = 'https:' + videoPageUrl;
+}
 
-        videoPageUrl =
-          data.video_url_hd ||
-          data.video_alt_url ||
-          data.video_alt_url2 ||
-          data.video_url ||
-          null;
+        const {
+          video_title,
+          video_categories,
+          preview_url
+        } = data;
 
-        if (videoPageUrl && videoPageUrl.startsWith('//')) {
-          videoPageUrl = 'https:' + videoPageUrl;
-        }
+        const metaResponse = new meta.MetaResponse(
+          id,
+          'movie',
+          video_title || 'Porntrex Video',
+          {
+            genres: video_categories ? video_categories.split(',') : [],
+            background: preview_url
+              ? (preview_url.startsWith('http') ? preview_url : 'https:' + preview_url)
+              : null,
+            description: video_title || 'Porntrex Video'
+          }
+        );
+
+        const result = {
+  metaResponse,
+  videoPageUrl
+};
+
+        this.metas[id] = result;
+
+        return result;
 
       } catch (e) {
         logger.error({ e }, 'Porntrex flashvars parse error');
       }
     }
 
-    // ---- FALLBACK: STREAM REGEX ----
+    // METHOD 2 : EMBED PLAYER
 
-    if (!videoPageUrl) {
+    const idMatch = id.match(/video\/(\d+)/i);
 
-      const match = html.match(/https?:\/\/[^"'<>]+?\.(m3u8|mp4)/i);
-
-      if (match) {
-        videoPageUrl = match[0];
-      }
+    if (!idMatch) {
+      logger.warn('Porntrex: video id not found');
+      return {
+        metaResponse: new meta.MetaResponse(
+          id,
+          'movie',
+          'Porntrex Video',
+          { description: 'Porntrex Video' }
+        )
+      };
     }
 
-    const metaResponse = new meta.MetaResponse(
+    const videoId = idMatch[1];
+
+    const embedUrl = `${this.baseUrl}embed/${videoId}`;
+
+    logger.debug({ embedUrl }, 'Porntrex loading embed');
+
+    const embedHtml = await this.fetchHtml(embedUrl);
+
+let videoPageUrl = null;
+
+// METHOD : PLAYER CONFIG
+
+if (!videoPageUrl) {
+
+  const playerMatch = embedHtml.match(/sources\s*:\s*(\[[\s\S]*?\])/i);
+
+  if (playerMatch) {
+    try {
+
+      const sources = JSON.parse(
+        playerMatch[1]
+          .replace(/file:/g,'"file":')
+          .replace(/label:/g,'"label":')
+          .replace(/'/g,'"')
+      );
+
+      if (Array.isArray(sources)) {
+
+        const best = sources.sort((a,b)=>{
+          const qa = parseInt(a.label) || 0;
+          const qb = parseInt(b.label) || 0;
+          return qb-qa;
+        })[0];
+
+        if (best?.file) {
+
+          videoPageUrl = best.file.startsWith('//')
+            ? 'https:' + best.file
+            : best.file;
+
+          videoPageUrl = this.cleanUrl(videoPageUrl);
+
+          logger.info({ videoPageUrl }, 'Porntrex player config stream');
+        }
+
+      }
+
+    } catch(e){
+      logger.error(e,'player config parse error');
+    }
+  }
+}
+
+// METHOD 4 : DIRECT STREAM REGEX
+if (!videoPageUrl) {
+
+  const streamMatch = embedHtml.match(/https?:\/\/[^\s"'<>]+?\.(m3u8|mp4)[^\s"'<>]*/gi);
+
+  if (streamMatch && streamMatch.length) {
+
+    const best = streamMatch.sort((a, b) => {
+      const qa = parseInt(a.match(/(\d{3,4})p/)?.[1] || 0);
+      const qb = parseInt(b.match(/(\d{3,4})p/)?.[1] || 0);
+      return qb - qa;
+    })[0];
+
+    videoPageUrl = best;
+videoPageUrl = this.cleanUrl(videoPageUrl);
+
+    if (videoPageUrl.startsWith('//')) {
+      videoPageUrl = 'https:' + videoPageUrl;
+    }
+
+    logger.info({ videoPageUrl }, 'Porntrex extracted stream');
+  }
+}
+
+// METHOD 5 : SOURCE TAG
+let source = null;
+
+if (!videoPageUrl) {
+
+  source = embedHtml.match(/<source[^>]+src=["']([^"']+\.mp4[^"']*)["']/i);
+
+  if (source) {
+
+    let src = source[1];
+
+    if (src.startsWith('//')) {
+      src = 'https:' + src;
+    } else if (!src.startsWith('http')) {
+      src = this.baseUrl.replace(/\/$/, '') + src;
+    }
+
+    videoPageUrl = this.cleanUrl(src);
+
+    logger.info({ videoPageUrl }, 'Porntrex source tag stream');
+  }
+}
+
+// METHOD 6 : M3U8 STREAM
+if (!videoPageUrl) {
+
+  const m3u8Match = embedHtml.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
+
+  if (m3u8Match) {
+
+    videoPageUrl = this.cleanUrl(m3u8Match[0]);
+
+    if (videoPageUrl.startsWith('//')) {
+      videoPageUrl = 'https:' + videoPageUrl;
+    }
+  }
+}
+
+if (!videoPageUrl && source) {
+  let src = source[1];
+
+  if (src.startsWith('//')) {
+    src = 'https:' + src;
+  } else if (!src.startsWith('http')) {
+    src = this.baseUrl.replace(/\/$/, '') + src;
+  }
+
+  videoPageUrl = this.cleanUrl(src);
+}
+
+// Try to extract player JSON
+let jsonMatch = null;
+
+if (!videoPageUrl) {
+  jsonMatch = embedHtml.match(/(\{[\s\S]*?(video_alt_url|video_url)[\s\S]*?\})/);
+}
+
+    if (videoPageUrl) {
+
+  logger.info({ videoPageUrl }, 'Porntrex final stream');
+  logger.debug('Porntrex using stream fallback');
+
+  const $ = load(html);
+
+  const title =
+    $('meta[property="og:title"]').attr('content') ||
+    $('title').text().replace(/\s*-\s*Porntrex/i, '').trim() ||
+    'Porntrex Video';
+
+  const description =
+    $('meta[name="description"]').attr('content') || title;
+
+  const poster =
+    $('meta[property="og:image"]').attr('content') || null;
+
+  return {
+    metaResponse: new meta.MetaResponse(
       id,
       'movie',
       title,
-      {
-        description,
-        poster
-      }
-    );
+      { description, poster }
+    ),
+    videoPageUrl
+  };
+}
+    let data = null;
 
-    const result = {
-      metaResponse,
-      videoPageUrl
-    };
+if (jsonMatch) {
+  try {
+    const cleaned = this.fixLooseJson(jsonMatch[0]);
+    data = JSON.parse(cleaned);
+
+    videoPageUrl =
+      data.video_url_hd ||
+      data.video_alt_url ||
+      data.video_url ||
+      videoPageUrl;
+
+  } catch (e) {
+    logger.error({ e }, 'Porntrex embed JSON parse error');
+  }
+}
+
+    const $ = load(html);
+
+const title =
+  $('meta[property="og:title"]').attr('content') ||
+  $('title').text().replace(/\s*-\s*Porntrex/i, '').trim() ||
+  'Porntrex Video';
+
+const description =
+  $('meta[name="description"]').attr('content') || title;
+
+const poster =
+  $('meta[property="og:image"]').attr('content') || null;
+
+const metaResponse = new meta.MetaResponse(
+  id,
+  'movie',
+  title,
+  {
+    description,
+    poster
+  }
+); 
+
+if (videoPageUrl) {
+  videoPageUrl = this.cleanUrl(videoPageUrl);
+}
+
+    const result = { 
+  metaResponse,
+  videoPageUrl
+};
 
     this.metas[id] = result;
+if (!videoPageUrl) {
+  logger.warn('Porntrex: no stream extracted');
+}
 
     return result;
   }
