@@ -184,7 +184,7 @@ if (videoPageUrl && videoPageUrl.startsWith('//')) {
 
 let videoPageUrl = null;
 
-const streamMatch = embedHtml.match(/https?:\/\/[^"'\\]+?\.(m3u8|mp4)[^"'\\]*/gi);
+const streamMatch = embedHtml.match(/https?:\/\/[^"'\\]+?\.(m3u8|mp4)(\?[^"'\\]*)?/gi);
 
 if (streamMatch && streamMatch.length) {
 
@@ -194,7 +194,11 @@ if (streamMatch && streamMatch.length) {
     return qb - qa;
   })[0];
 
-  videoPageUrl = best;
+  videoPageUrl = this.cleanUrl(best);
+
+if (videoPageUrl.startsWith('//')) {
+  videoPageUrl = 'https:' + videoPageUrl;
+}
 
   logger.info({ videoPageUrl }, 'Porntrex extracted stream');
 }
@@ -219,12 +223,19 @@ const m3u8Match = embedHtml.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
 
 if (!videoPageUrl && m3u8Match) {
   videoPageUrl = m3u8Match[0];
+videoPageUrl = this.cleanUrl(videoPageUrl);
+
+if (videoPageUrl.startsWith('//')) {
+  videoPageUrl = 'https:' + videoPageUrl;
+}
 }
 
 // Try to extract player JSON
 const jsonMatch = embedHtml.match(/(\{[\s\S]*?(video_alt_url|video_url)[\s\S]*?\})/);
 
     if (!jsonMatch && videoPageUrl) {
+
+  logger.info({ videoPageUrl }, 'Porntrex final stream');
   logger.debug('Porntrex using stream fallback');
 
   const $ = load(html);
