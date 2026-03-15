@@ -1,113 +1,165 @@
 const { load } = require('cheerio');
-const Provider = require('./provider');
+const logger = require('../logger');
 const { meta } = require('../model');
+const Provider = require('./provider');
 
 class PorntrexProvider extends Provider {
 
   constructor() {
     super('https://porntrex.com/', 'porntrex');
+    this.dataset = {};
+    this.metas = {};
   }
 
   static create() {
     return new PorntrexProvider();
   }
 
-  /* -------------------- CATALOG -------------------- */
+  getInitialUrl(catalogId) {
+    const segment = this.getSegment(catalogId);
+    if (segment) return `${this.baseUrl}${segment}/`;
+    return this.baseUrl;
+  }
+
+  getSegment(catalogId) {
+    return catalogId.substring(this.getName().length + 1);
+  }
+
+  handleSearch({ extra: { search: keyword } }) {
+    return `${this.baseUrl}search/${encodeURIComponent(keyword)}/`;
+  }
+
+  handleGenre(args) {
+    return this.handleSearch({ ...args, extra: { search: args.extra.genre } });
+  }
+
+  handlePagination(url, { extra: { skip } }) {
+  const page = this.page(skip);
+  return `${url}page/${page}/`;
+}
 
   getCatalogMetas(html) {
-
-    const $ = load(html);
     const metas = [];
+    const $ = load(html);
 
-    $('.video-item, .thumb').each((_, el) => {
+    $('div.video-item, div.thumb, div.item, div.video').each((index, element) => {
+      const $e = $(element);
+      const $a = $e.children('a');
 
-      const a = $(el).find('a').first();
-      const img = $(el).find('img').first();
+      const videoPageUrlRaw = $a.attr('href');
 
-      const href = a.attr('href');
-      if (!href) return;
+let videoPageUrl = videoPageUrlRaw;
 
-      const idMatch = href.match(/video\/(\d+)/);
-      if (!idMatch) return;
-
-      const id = idMatch[1];
-
-      const title =
-        img.attr('alt') ||
-        a.attr('title') ||
-        'Porntrex Video';
+if (videoPageUrl && !videoPageUrl.startsWith('http')) {
+  videoPageUrl = this.baseUrl.replace(/\/$/, '') + videoPageUrl;
+}
+      const $img = $a.children('img');
 
       const poster =
-        img.attr('data-src') ||
-        img.attr('src');
+  $img.attr('data-src') ||
+  $img.attr('data-original') ||
+  $img.attr('data-lazy-src') ||
+  $img.attr('src');
+
+      const title = $img.attr('alt');
+
+      if (!videoPageUrl || !title) return;
 
       metas.push(
         new meta.MetaPreview(
-          `porntrex:${id}`,
+          videoPageUrl,
           'movie',
           title,
-          poster
+          poster?.startsWith('http') ? poster : 'https:' + poster
         )
       );
-
     });
 
     return metas;
   }
 
-  /* -------------------- META + STREAM SOURCE -------------------- */
+  fixLooseJson(looseJsonString) {
 
-  async parseVideoPage({ id }) {
+    let jsonString = looseJsonString
+      .trim()
+      .replace(/^"(.*)"$/, '$1');
 
-    const videoId = id.split(':')[1];
+    jsonString = jsonString.replace(/'/g, '"');
 
-    const pageUrl = `${this.baseUrl}video/${videoId}`;
-    const embedUrl = `${this.baseUrl}embed/${videoId}`;
+    jsonString = jsonString.replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":');
 
-    const html = await this.fetchHtml(pageUrl);
-    const embed = await this.fetchHtml(embedUrl);
+    jsonString = jsonString.replace(/:\s*'([^']*)'/g, ': "$1"');
 
-    const $ = load(html);
-
-    const title =
-      $('meta[property="og:title"]').attr('content') ||
-      'Porntrex Video';
-
-    const poster =
-      $('meta[property="og:image"]').attr('content');
-
-    let videoPageUrl = null;
-
-    /* -------- HLS playlist -------- */
-
-    const m3u8 = embed.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/);
-
-    if (m3u8) {
-      videoPageUrl = m3u8[0];
-    }
-
-    /* -------- fallback MP4 -------- */
-
-    if (!videoPageUrl) {
-      const mp4 = embed.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/);
-      if (mp4) videoPageUrl = mp4[0];
-    }
-
-    return {
-      metaResponse: new meta.MetaResponse(
-        id,
-        'movie',
-        title,
-        {
-          background: poster,
-          poster
-        }
-      ),
-      videoPageUrl
-    };
-
+    return jsonString;
   }
 
+  async parseVideoPage({ id, html }) {
+
+  const videoIdMatch = id.match(/video\/(\d+)/);
+
+  if (!videoIdMatch) {
+    logger.warn("Porntrex: invalid video id");
+    return null;
+  }
+
+  const videoId = videoIdMatch[1];
+  const embedUrl = `${this.baseUrl}embed/${videoId}`;
+
+  const embedHtml = await this.fetchHtml(embedUrl);
+
+  // Extract streams
+  const streams = [...embedHtml.matchAll(/file\s*:\s*["']([^"']+)["']/g)];
+
+  let videoPageUrl = null;
+
+  if (streams.length) {
+    const urls = streams.map(s => s[1]);
+
+    // pick highest quality
+    urls.sort((a,b)=>{
+      const qa = parseInt(a.match(/(\d{3,4})p/)?.[1] || 0);
+      const qb = parseInt(b.match(/(\d{3,4})p/)?.[1] || 0);
+      return qb - qa;
+    });
+
+    videoPageUrl = urls[0];
+
+    if (videoPageUrl.startsWith("//")) {
+      videoPageUrl = "https:" + videoPageUrl;
+    }
+
+    videoPageUrl = this.cleanUrl(videoPageUrl);
+  }
+
+  const $ = load(html);
+
+  const title =
+    $('meta[property="og:title"]').attr("content") ||
+    $("title").text().replace(/\s*-\s*Porntrex/i,"").trim() ||
+    "Porntrex Video";
+
+  const description =
+    $('meta[name="description"]').attr("content") || title;
+
+  const poster =
+    $('meta[property="og:image"]').attr("content") || null;
+
+  return {
+    metaResponse: new meta.MetaResponse(
+      id,
+      "movie",
+      title,
+      {
+        description,
+        background: poster
+      }
+    ),
+    videoPageUrl
+  };
+}
+
+    return result;
+  }
 }
 
 module.exports = PorntrexProvider.create;
