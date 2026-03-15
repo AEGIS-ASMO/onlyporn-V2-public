@@ -215,7 +215,21 @@ class PorntrexProvider extends Provider {
 
     const embedHtml = await this.fetchHtml(embedUrl);
 
-    logger.debug(embedHtml.substring(0, 1000), 'Porntrex embed HTML');
+logger.debug(embedHtml.substring(0, 1000), 'Porntrex embed HTML');
+
+// Fallback: extract direct MP4 source
+let videoPageUrl = null;
+
+const source = embedHtml.match(/<source[^>]+src="([^"]+\.mp4[^"]*)"/i);
+
+if (source) {
+  videoPageUrl = source[1].startsWith('http')
+    ? source[1]
+    : 'https:' + source[1];
+}
+
+// Try to extract player JSON
+const jsonMatch = embedHtml.match(/(\{[\s\S]*?video_alt_url[\s\S]*?\})/);
 
     const jsonMatch = embedHtml.match(/(\{[\s\S]*?video_alt_url[\s\S]*?\})/);
 
@@ -273,7 +287,10 @@ const metaResponse = new meta.MetaResponse(
 
     this.dataset[id] = data;
 
-    const result = { metaResponse };
+    const result = { 
+  metaResponse,
+  videoPageUrl
+};
 
     this.metas[id] = result;
 
