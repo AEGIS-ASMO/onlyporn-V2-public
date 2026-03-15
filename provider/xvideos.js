@@ -71,13 +71,12 @@ class XvideosProvider extends Provider {
       if (parsedMeta['href']) {
         const id = new URL(parsedMeta['href'], this.baseUrl).href;
 
-        metadatas.push(
-          new meta.MetaPreview(
-            id.replace('/THUMBNUM', ''),
-            Provider.TYPE,
-            parsedMeta['title'],
-            parsedMeta['data-src']
-          )
+        new meta.MetaPreview(
+  id.replace('/THUMBNUM', ''),
+  Provider.TYPE,
+  parsedMeta['title'],
+  parsedMeta['data-src'] || parsedMeta['data-original'] || parsedMeta['src']
+)
         );
       }
     });
