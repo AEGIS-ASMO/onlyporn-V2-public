@@ -71,14 +71,6 @@ class PorntrexProvider extends Provider {
     return metas;
   }
 
-  async getStreams(meta) {
-
-    if (!meta) return { streams: [] };
-    if (!meta.metaResponse && !meta.id) {
-  logger.warn('Porntrex invalid meta object');
-  return { streams: [] };
-}
-
     const id = meta.metaResponse?.id || meta.id;
 
     const data = this.dataset[id];
@@ -235,7 +227,7 @@ if (source) {
 }
 
 // Try to extract player JSON
-const jsonMatch = embedHtml.match(/(\{[\s\S]*?video_alt_url[\s\S]*?\})/);
+const jsonMatch = embedHtml.match(\{[\s\S]*?(video_alt_url|video_url)[\s\S]*?\});
 
     if (!jsonMatch && videoPageUrl) {
   logger.debug('Porntrex using MP4 fallback');
