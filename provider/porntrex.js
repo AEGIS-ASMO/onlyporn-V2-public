@@ -215,70 +215,48 @@ class PorntrexProvider extends Provider {
 
     const embedHtml = await this.fetchHtml(embedUrl);
 
-    logger.debug(embedHtml.substring(0, 1000), 'Porntrex embed HTML');
+    // FALLBACK : direct mp4 extraction from embed
+const sourceMatch = embedHtml.match(/<source[^>]+src="([^"]+\.mp4[^"]*)"/i);
 
-    const jsonMatch = embedHtml.match(/(\{[\s\S]*?video_alt_url[\s\S]*?\})/);
+if (sourceMatch) {
 
-    if (!jsonMatch) {
-      logger.warn('Porntrex: player json not found');
-      return {
-        metaResponse: new meta.MetaResponse(
-          id,
-          'movie',
-          'Porntrex Video',
-          { description: 'Porntrex Video' }
-        )
-      };
+  const videoPageUrl = sourceMatch[1].startsWith('http')
+    ? sourceMatch[1]
+    : 'https:' + sourceMatch[1];
+
+  logger.debug({ videoPageUrl }, 'Porntrex fallback mp4 found');
+
+  const $ = load(html);
+
+  const title =
+    $('meta[property="og:title"]').attr('content') ||
+    $('title').text().replace(/\s*-\s*Porntrex/i, '').trim() ||
+    'Porntrex Video';
+
+  const description =
+    $('meta[name="description"]').attr('content') || title;
+
+  const poster =
+    $('meta[property="og:image"]').attr('content') || null;
+
+  const metaResponse = new meta.MetaResponse(
+    id,
+    'movie',
+    title,
+    {
+      description,
+      poster
     }
+  );
 
-    let data;
+  const result = {
+    metaResponse,
+    videoPageUrl
+  };
 
-    try {
-      const cleaned = this.fixLooseJson(jsonMatch[0]);
-      data = JSON.parse(cleaned);
-    } catch (e) {
-      logger.error({ e }, 'Porntrex embed JSON parse error');
-      return {
-        metaResponse: new meta.MetaResponse(
-          id,
-          'movie',
-          'Porntrex Video',
-          { description: 'Porntrex Video' }
-        )
-      };
-    }
+  this.metas[id] = result;
 
-    const $ = load(html);
-
-const title =
-  $('meta[property="og:title"]').attr('content') ||
-  $('title').text().replace(/\s*-\s*Porntrex/i, '').trim() ||
-  'Porntrex Video';
-
-const description =
-  $('meta[name="description"]').attr('content') || title;
-
-const poster =
-  $('meta[property="og:image"]').attr('content') || null;
-
-const metaResponse = new meta.MetaResponse(
-  id,
-  'movie',
-  title,
-  {
-    description,
-    poster
-  }
-);
-
-    this.dataset[id] = data;
-
-    const result = { metaResponse };
-
-    this.metas[id] = result;
-
-    return result;
-  }
+  return result;
 }
 
 module.exports = PorntrexProvider.create;
