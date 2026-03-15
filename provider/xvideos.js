@@ -14,20 +14,9 @@ class XvideosProvider extends Provider {
   }
 
   async fetchHtml(url) {
-    console.info('fetching url', url);
-    try {
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0",
-          "Accept": "text/html"
-        }
-      });
-      return await response.text();
-    } catch (error) {
-      console.error(error);
-      return '';
-    }
-  }
+  console.info('fetching url', url);
+  return super.fetchHtml(url);
+}
 
   getInitialUrl() {
     return this.baseUrl;
@@ -42,13 +31,15 @@ class XvideosProvider extends Provider {
   }
 
   handlePagination(url, { extra: { skip, search } }) {
-    if (search) {
-      this.limit = 25;
-    }
 
-    const prefix = url.includes('?') ? '&' : '?';
-    return `${prefix}p=${this.page(skip)}`;
+  if (search) {
+    this.limit = 25;
   }
+
+  const prefix = url.includes('?') ? '&' : '?';
+
+  return `${url}${prefix}p=${this.page(skip)}`;
+}
 
   getCatalogMetas(html) {
     const metadatas = [];
@@ -78,7 +69,7 @@ class XvideosProvider extends Provider {
       }
 
       if (parsedMeta['href']) {
-        const id = this.baseUrl + parsedMeta['href'];
+        const id = new URL(parsedMeta['href'], this.baseUrl).href;
 
         metadatas.push(
           new meta.MetaPreview(
@@ -183,6 +174,8 @@ class XvideosProvider extends Provider {
       .then(async html => {
 
         const metaData = this.parseVideoPage({ id, html });
+
+logger.debug({ videoPageUrl: metaData.videoPageUrl }, 'XVideos stream source');
 
         let streamsResponse = await super.getStreams(metaData);
 
