@@ -237,12 +237,12 @@ async fetchJson(url) {
       return Promise.resolve({ streams: [] });
     }
 
-    if (/\.mp4(\?|$)/i.test(meta.videoPageUrl) || /\.m3u8(\?|$)/i.test(meta.videoPageUrl)) {
+    if (/\.mp4(\?|$)/i.test(meta.videoPageUrl)) {
   return Promise.resolve({
     streams: [{
       type: 'movie',
       url: meta.videoPageUrl,
-      name: 'HD'
+      name: 'MP4'
     }]
   });
 }
