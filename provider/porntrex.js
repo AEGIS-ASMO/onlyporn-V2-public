@@ -231,7 +231,7 @@ if (!videoPageUrl) {
 // METHOD 4 : DIRECT STREAM REGEX
 if (!videoPageUrl) {
 
-  const streamMatch = embedHtml.match(/https?:\/\/[^\s"'<>]+?\.(m3u8|mp4)[^\s"'<>]*/gi);
+  const streamMatch = embedHtml.match(/https?:\/\/[^\s"'<>]+\.(m3u8|mp4)[^\s"'<>]*/gi);
 
   if (streamMatch && streamMatch.length) {
 
@@ -328,14 +328,14 @@ if (!videoPageUrl) {
     $('meta[property="og:image"]').attr('content') || null;
 
   return {
-    metaResponse: new meta.MetaResponse(
-      id,
-      'movie',
-      title,
-      { description, poster }
-    ),
-    videoPageUrl
-  };
+  metaResponse: new meta.MetaResponse(
+    id,
+    'movie',
+    title,
+    { description, background: poster }
+  ),
+  videoPageUrl
+};
 }
     let data = null;
 
@@ -384,7 +384,7 @@ if (videoPageUrl) {
 
     const result = {
   metaResponse,
-  streams: videoPageUrl ? [{ url: videoPageUrl }] : []
+  videoPageUrl
 };
 
     this.metas[id] = result;
