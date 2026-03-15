@@ -223,9 +223,15 @@ let videoPageUrl = null;
 const source = embedHtml.match(/<source[^>]+src="([^"]+\.mp4[^"]*)"/i);
 
 if (source) {
-  videoPageUrl = source[1].startsWith('http')
-    ? source[1]
-    : 'https:' + source[1];
+  const src = source[1];
+
+  if (src.startsWith('http')) {
+    videoPageUrl = src;
+  } else if (src.startsWith('//')) {
+    videoPageUrl = 'https:' + src;
+  } else {
+    videoPageUrl = 'https://porntrex.com' + src;
+  }
 }
 
 // Try to extract player JSON
