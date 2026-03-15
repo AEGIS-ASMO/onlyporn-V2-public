@@ -183,18 +183,14 @@ const streamMatch = embedHtml.match(/https?:\/\/[^"'\\]+?\.(m3u8|mp4)[^"'\\]*/gi
 if (streamMatch && streamMatch.length) {
 
   const best = streamMatch.sort((a, b) => {
-
     const qa = parseInt(a.match(/(\d{3,4})p/)?.[1] || 0);
     const qb = parseInt(b.match(/(\d{3,4})p/)?.[1] || 0);
-
     return qb - qa;
-
   })[0];
 
-  videoPageUrl = best.replace(/\\\//g, '/');
+  videoPageUrl = best;
 
-logger.info({ videoPageUrl }, 'Porntrex extracted stream');
-
+  logger.info({ videoPageUrl }, 'Porntrex extracted stream');
 }
 
 logger.debug(embedHtml.substring(0, 1000), 'Porntrex embed HTML');
