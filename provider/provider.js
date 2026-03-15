@@ -173,13 +173,29 @@ class Provider {
 }
 
   getStreams(meta) {
-    return this.fetchHtml(meta.videoPageUrl)
-      .then(content => {
-  if (content.includes("#EXTM3U")) {
-    return this.parseM3u8(content);
+
+  if (!meta.videoPageUrl) {
+    return Promise.resolve({ streams: [] });
   }
-  return [];
-})
+
+  // if direct mp4
+  if (meta.videoPageUrl.endsWith(".mp4")) {
+    return Promise.resolve({
+      streams: [{
+        type: 'movie',
+        url: meta.videoPageUrl,
+        name: 'HD'
+      }]
+    });
+  }
+
+  return this.fetchHtml(meta.videoPageUrl)
+    .then(content => {
+      if (content.includes("#EXTM3U")) {
+        return this.parseM3u8(content);
+      }
+      return [];
+    })
       .then(streams =>
         streams.map(stream =>
           this.transformStream(meta.videoPageUrl, stream)
