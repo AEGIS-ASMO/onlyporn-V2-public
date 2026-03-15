@@ -53,6 +53,26 @@ class Provider {
         timeout: 15000
       });
 
+async fetchJson(url) {
+  try {
+    const response = await client.get(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": this.baseUrl
+      },
+      timeout: 15000
+    });
+
+    return response.data;
+
+  } catch (error) {
+    console.error("fetchJson error", error);
+    return null;
+  }
+}
+
       return response.data;
 
     } catch (error) {
