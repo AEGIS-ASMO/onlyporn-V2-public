@@ -231,17 +231,19 @@ if (source) {
 // Try to extract player JSON
 const jsonMatch = embedHtml.match(/(\{[\s\S]*?video_alt_url[\s\S]*?\})/);
 
-    if (!jsonMatch) {
-      logger.warn('Porntrex: player json not found');
-      return {
-        metaResponse: new meta.MetaResponse(
-          id,
-          'movie',
-          'Porntrex Video',
-          { description: 'Porntrex Video' }
-        )
-      };
-    }
+    if (!jsonMatch && videoPageUrl) {
+  logger.debug('Porntrex using MP4 fallback');
+
+  return {
+    metaResponse: new meta.MetaResponse(
+      id,
+      'movie',
+      'Porntrex Video',
+      { description: 'Porntrex Video' }
+    ),
+    videoPageUrl
+  };
+}
 
     let data;
 
