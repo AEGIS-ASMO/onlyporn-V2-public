@@ -82,14 +82,6 @@ async fetchJson(url) {
   }
 }
 
-      return response.data;
-
-    } catch (error) {
-      console.error(error);
-      return '';
-    }
-  }
-
   cleanUrl(url) {
     if (!url) return url;
 
