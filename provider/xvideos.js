@@ -41,11 +41,6 @@ class XvideosProvider extends Provider {
   return `${url}${prefix}p=${this.page(skip)}`;
 }
 
-  const prefix = url.includes('?') ? '&' : '?';
-
-  return `${url}${prefix}p=${this.page(skip)}`;
-}
-
   getCatalogMetas(html) {
     const metadatas = [];
     const $ = load(html);
