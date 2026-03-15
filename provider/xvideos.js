@@ -32,8 +32,13 @@ class XvideosProvider extends Provider {
 
   handlePagination(url, { extra: { skip, search } }) {
 
+  const prefix = url.includes('?') ? '&' : '?';
+
   if (search) {
-  return `${url}${prefix}p=${Math.floor(skip / 25)}`;
+    return `${url}${prefix}p=${Math.floor(skip / 25)}`;
+  }
+
+  return `${url}${prefix}p=${this.page(skip)}`;
 }
 
   const prefix = url.includes('?') ? '&' : '?';
@@ -90,8 +95,6 @@ class XvideosProvider extends Provider {
   }
 
   parseVideoPage({ id, html }) {
-  
-logger.debug({ videoPageUrl }, 'XVideos extracted video URL');
 
     const $ = load(html);
 
@@ -137,7 +140,7 @@ logger.debug({ videoPageUrl }, 'XVideos extracted video URL');
 
     match = html.match(regexThumbnail);
     if (match && match[1]) {
-      background = match[1];
+      background = match[1].replace(/\\\//g, '/');
     }
 
     const metaMap = {};
@@ -163,6 +166,8 @@ logger.debug({ videoPageUrl }, 'XVideos extracted video URL');
       }
     );
 
+logger.debug({ videoPageUrl }, 'XVideos extracted video URL');
+
     return {
       metaResponse,
       videoPageUrl
@@ -183,30 +188,28 @@ logger.debug({ videoPageUrl }, 'XVideos extracted video URL');
     return streamsResponse;
   }
 
-        const $ = load(html);
+  const $ = load(html);
+  let streams = [];
 
-        let streams = [];
+  try {
+    const json = JSON.parse(
+      $('script[type="application/ld+json"]').first().text()
+    );
 
-        try {
-          const json = JSON.parse(
-            $('script[type="application/ld+json"]').first().text()
-          );
-
-          if (json && json.contentUrl) {
-            streams.push({
-              type: 'movie',
-              url: json.contentUrl,
-              name: 'Onlyporn'
-            });
-          }
-
-        } catch (e) {
-          logger.warn('ld+json parse failed');
-        }
-
-        return { streams };
+    if (json && json.contentUrl) {
+      streams.push({
+        type: 'movie',
+        url: json.contentUrl,
+        name: 'Onlyporn'
       });
+    }
+
+  } catch (e) {
+    logger.warn('ld+json parse failed');
   }
+
+  return { streams };
+}
 
   transformStream(url, stream) {
     return {
