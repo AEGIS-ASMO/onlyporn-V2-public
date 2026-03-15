@@ -93,7 +93,8 @@ class PorntrexProvider extends Provider {
         (k.startsWith('video_alt_url') || k.startsWith('video_url')) &&
         !k.endsWith('_text')
       )
-      .sort((a,b) => b.localeCompare(a));
+      .sort()
+      .reverse();
 
     const streams = qualities
       .filter(key => data[key])
@@ -218,50 +219,17 @@ class PorntrexProvider extends Provider {
 
     const jsonMatch = embedHtml.match(/(\{[\s\S]*?video_alt_url[\s\S]*?\})/);
 
-let data = null;
-
-if (jsonMatch) {
-  try {
-    const cleaned = this.fixLooseJson(jsonMatch[0]);
-    data = JSON.parse(cleaned);
-  } catch (e) {
-    logger.error({ e }, 'Porntrex embed JSON parse error');
-  }
-}
-
-/* NEW FALLBACK STREAM EXTRACTION */
-if (!data) {
-
-  logger.warn('Porntrex: JSON not found, trying <source> fallback');
-
-  const sourceMatch = embedHtml.match(
-    /<source[^>]+src=["']([^"']+\.mp4[^"']*)["']/i
-  );
-
-  if (sourceMatch) {
-
-    data = {
-      video_url: sourceMatch[1]
-    };
-
-    logger.debug({ stream: sourceMatch[1] }, 'Porntrex fallback stream');
-
-  }
-
-}
-
-if (!data) {
-  logger.warn('Porntrex: no streams detected');
-
-  return {
-    metaResponse: new meta.MetaResponse(
-      id,
-      'movie',
-      'Porntrex Video',
-      { description: 'Porntrex Video' }
-    )
-  };
-}
+    if (!jsonMatch) {
+      logger.warn('Porntrex: player json not found');
+      return {
+        metaResponse: new meta.MetaResponse(
+          id,
+          'movie',
+          'Porntrex Video',
+          { description: 'Porntrex Video' }
+        )
+      };
+    }
 
     let data;
 
