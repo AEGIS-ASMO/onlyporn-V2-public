@@ -86,8 +86,8 @@ class XvideosProvider extends Provider {
   }
 
   async getMetadata(args) {
-    return super.getMetadata(args).then(meta => meta.metaResponse);
-  }
+  return super.getMetadata(args);
+}
 
   parseVideoPage({ id, html }) {
 
