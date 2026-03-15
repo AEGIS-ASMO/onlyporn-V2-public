@@ -158,8 +158,4 @@ if (videoPageUrl && !videoPageUrl.startsWith('http')) {
   };
 }
 
-    return result;
-  }
-}
-
 module.exports = PorntrexProvider.create;
