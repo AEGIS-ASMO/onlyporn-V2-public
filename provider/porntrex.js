@@ -374,17 +374,17 @@ const metaResponse = new meta.MetaResponse(
   title,
   {
     description,
-    poster
+    background: poster
   }
-); 
+);
 
 if (videoPageUrl) {
   videoPageUrl = this.cleanUrl(videoPageUrl);
 }
 
-    const result = { 
+    const result = {
   metaResponse,
-  videoPageUrl
+  streams: videoPageUrl ? [{ url: videoPageUrl }] : []
 };
 
     this.metas[id] = result;
