@@ -74,6 +74,10 @@ class PorntrexProvider extends Provider {
   async getStreams(meta) {
 
     if (!meta) return { streams: [] };
+    if (!meta.metaResponse && !meta.id) {
+  logger.warn('Porntrex invalid meta object');
+  return { streams: [] };
+}
 
     const id = meta.metaResponse?.id || meta.id;
 
@@ -170,7 +174,7 @@ class PorntrexProvider extends Provider {
             background: preview_url
               ? (preview_url.startsWith('http') ? preview_url : 'https:' + preview_url)
               : null,
-            description: video_title
+            description: video_title || 'Porntrex Video'
           }
         );
 
@@ -244,28 +248,28 @@ class PorntrexProvider extends Provider {
       };
     }
 
-    const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-    const title = titleMatch
-      ? titleMatch[1].replace(/\s*-\s*Porntrex/i, '').trim()
-      : 'Porntrex Video';
+    const $ = load(html);
 
-    const posterMatch = html.match(/poster="([^"]+)"/);
+const title =
+  $('meta[property="og:title"]').attr('content') ||
+  $('title').text().replace(/\s*-\s*Porntrex/i, '').trim() ||
+  'Porntrex Video';
 
-    const poster = posterMatch
-      ? posterMatch[1].startsWith('http')
-        ? posterMatch[1]
-        : 'https:' + posterMatch[1]
-      : null;
+const description =
+  $('meta[name="description"]').attr('content') || title;
 
-    const metaResponse = new meta.MetaResponse(
-      id,
-      'movie',
-      title,
-      {
-        description: title,
-        poster
-      }
-    );
+const poster =
+  $('meta[property="og:image"]').attr('content') || null;
+
+const metaResponse = new meta.MetaResponse(
+  id,
+  'movie',
+  title,
+  {
+    description,
+    poster
+  }
+);
 
     this.dataset[id] = data;
 
