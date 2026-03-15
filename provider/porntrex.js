@@ -136,13 +136,22 @@ class PorntrexProvider extends Provider {
     if (streams.length) {
       const urls = streams.map(s => s[1]);
 
-      urls.sort((a, b) => {
-        const qa = parseInt(a.match(/(\d{3,4})p/)?.[1] || 0);
-        const qb = parseInt(b.match(/(\d{3,4})p/)?.[1] || 0);
-        return qb - qa;
-      });
+      // Prefer HLS playlist
+const m3u8 = urls.find(u => u.includes(".m3u8"));
 
-      videoPageUrl = urls[0];
+if (m3u8) {
+  videoPageUrl = m3u8;
+} else {
+
+  // fallback to best MP4
+  urls.sort((a, b) => {
+    const qa = parseInt(a.match(/(\d{3,4})p/)?.[1] || 0);
+    const qb = parseInt(b.match(/(\d{3,4})p/)?.[1] || 0);
+    return qb - qa;
+  });
+
+  videoPageUrl = urls[0];
+}
 
       if (videoPageUrl.startsWith("//")) {
         videoPageUrl = "https:" + videoPageUrl;
