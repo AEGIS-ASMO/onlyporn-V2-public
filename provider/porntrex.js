@@ -46,7 +46,13 @@ class PorntrexProvider extends Provider {
       const $e = $(element);
       const $a = $e.children('a');
 
-      const videoPageUrl = $a.attr('href');
+      const videoPageUrlRaw = $a.attr('href');
+
+let videoPageUrl = videoPageUrlRaw;
+
+if (videoPageUrl && !videoPageUrl.startsWith('http')) {
+  videoPageUrl = this.baseUrl.replace(/\/$/, '') + videoPageUrl;
+}
       const $img = $a.children('img');
 
       const poster =
