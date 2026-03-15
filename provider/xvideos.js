@@ -169,9 +169,7 @@ class XvideosProvider extends Provider {
 
   async processStreams({ id }) {
 
-    return this.fetchHtml(this.baseUrl)
-      .then(_ => this.fetchHtml(id))
-      .then(async html => {
+    return this.fetchHtml(id).then(async html => {
 
         const metaData = this.parseVideoPage({ id, html });
 
