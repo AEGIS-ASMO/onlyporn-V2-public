@@ -141,7 +141,7 @@ if (hashMatch) {
   hash = hashMatch[1];
 }
 
-if (mgfsMatch && hash) {
+if (mgfs && hash) {
 
   const mgfs = mgfsMatch[1];
 
