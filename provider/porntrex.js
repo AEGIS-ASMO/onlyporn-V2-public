@@ -101,7 +101,7 @@ async resolveStream(url) {
   try {
     const res = await fetch(url, {
       method: "HEAD",
-      redirect: "manual"
+      redirect: "follow"
     });
 
     const location = res.headers.get("location");
@@ -144,7 +144,10 @@ async buildQualityStreams(url) {
 
       try {
 
-        const res = await fetch(testUrl, { method: "HEAD" });
+        const res = await fetch(testUrl, {
+  method: "HEAD",
+  timeout: 5000
+});
 
         if (res.status === 200) {
           streams.push({
