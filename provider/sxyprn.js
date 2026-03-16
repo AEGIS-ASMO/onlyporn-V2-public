@@ -131,11 +131,11 @@ if (poster && poster.startsWith('//')) {
 
 const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
 
-const thumb = $('meta[property="og:image"]').attr('content');
+const thumb = poster;
 
 let hash = null;
 
-const hashMatch = thumb?.match(/vid\/([^/]+)\//);
+const hashMatch = thumb?.match(/\/vid\/([^/]+)\//);
 
 if (hashMatch) {
   hash = hashMatch[1];
@@ -145,11 +145,11 @@ if (mgfsMatch && hash) {
 
   const mgfs = mgfsMatch[1];
 
-  const cdnMatch = thumb?.match(/\/\/b(\d)\.trafficdeposit/);
-const cdn = cdnMatch ? cdnMatch[1] : 1;
+  const cdnMatch = thumb?.match(/\/\/(b\d+)\.trafficdeposit/);
+  const cdn = cdnMatch ? cdnMatch[1] : 'b1';
 
   videoUrl =
-    `https://b${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
+    `https://${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
 
   logger.debug({ hash, mgfs, videoUrl }, "Sxyprn extracted stream");
 }
