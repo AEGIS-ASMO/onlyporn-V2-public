@@ -126,14 +126,12 @@ class SxyprnProvider extends Provider {
 
   let videoUrl = null;
 
-  // safer extraction from raw HTML
   const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
 
-if (mgfsMatch) {
-   const mgfsId = mgfsMatch[1];
-}
+  if (mgfsMatch) {
 
-    // rotate CDN server
+    const mgfs = mgfsMatch[1];
+
     const cdn = Math.floor(Math.random() * 3) + 1;
 
     videoUrl =
