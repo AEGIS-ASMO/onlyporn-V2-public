@@ -101,92 +101,63 @@ class PorntrexProvider extends Provider {
 
   async parseVideoPage({ id, html }) {
 
-    const videoIdMatch = id.match(/video\/(\d+)/i);
+  const videoIdMatch = id.match(/video\/(\d+)/i);
 
-    if (!videoIdMatch) {
-      logger.warn("Porntrex: invalid video id");
-      return null;
-    }
-
-    const videoId = videoIdMatch[1];
-    const embedUrl = `${this.baseUrl}embed/${videoId}`;
-
-    const embedHtml = await this.fetchHtml(embedUrl);
-
-    // Extract playlist URL
-const playlistMatch =
-  embedHtml.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/i);
-
-// Debug
-logger.debug({
-  embedPreview: embedHtml.substring(0, 400),
-  foundM3U8: playlistMatch?.[0]
-}, "Porntrex embed preview");
-
-let streams = [];
-
-let playlistUrl = null;
-
-const playlistMatch =
-  embedHtml.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/i);
-
-if (playlistMatch) {
-  playlistUrl = this.cleanUrl(playlistMatch[1]);
-  logger.debug("Porntrex HLS detected: " + playlistUrl);
-}
-
-  streams.sort((a, b) => {
-  const qa = parseInt(a.title.replace("p","")) || 0;
-  const qb = parseInt(b.title.replace("p","")) || 0;
-  return qb - qa;
-});
-
-// fallback MP4 detection
-if (!streams.length) {
-
-  const fallback = embedHtml.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
-
-  if (fallback) {
-    streams.push({
-      name: "Porntrex",
-      title: "HD",
-      url: this.cleanUrl(fallback[0])
-    });
+  if (!videoIdMatch) {
+    logger.warn("Porntrex: invalid video id");
+    return null;
   }
 
-}
+  const videoId = videoIdMatch[1];
+  const embedUrl = `${this.baseUrl}embed/${videoId}`;
 
-}
-    const $ = load(html);
+  const embedHtml = await this.fetchHtml(embedUrl);
 
-    const title =
-      $('meta[property="og:title"]').attr("content") ||
-      $("title").text().replace(/\s*-\s*Porntrex/i, "").trim() ||
-      "Porntrex Video";
+  // Extract m3u8 playlist
+  const playlistMatch =
+    embedHtml.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/i);
 
-    const description =
-      $('meta[name="description"]').attr("content") || title;
+  logger.debug({
+    embedPreview: embedHtml.substring(0, 400),
+    foundM3U8: playlistMatch?.[0]
+  }, "Porntrex embed preview");
 
-    // FIX 3 — Poster normalization
-    let poster = $('meta[property="og:image"]').attr("content") || null;
+  let playlistUrl = null;
 
-    if (poster && poster.startsWith("//")) {
-      poster = "https:" + poster;
-    }
-
-    return {
-  metaResponse: new meta.MetaResponse(
-    id,
-    "movie",
-    title,
-    {
-      description,
-      background: poster
-    }
-  ),
-  videoPageUrl: playlistUrl
-};
+  if (playlistMatch) {
+    playlistUrl = this.cleanUrl(playlistMatch[1]);
+    logger.debug("Porntrex HLS detected: " + playlistUrl);
   }
+
+  const $ = load(html);
+
+  const title =
+    $('meta[property="og:title"]').attr("content") ||
+    $("title").text().replace(/\s*-\s*Porntrex/i, "").trim() ||
+    "Porntrex Video";
+
+  const description =
+    $('meta[name="description"]').attr("content") || title;
+
+  let poster = $('meta[property="og:image"]').attr("content") || null;
+
+  if (poster && poster.startsWith("//")) {
+    poster = "https:" + poster;
+  }
+
+  return {
+    metaResponse: new meta.MetaResponse(
+      id,
+      "movie",
+      title,
+      {
+        description,
+        background: poster
+      }
+    ),
+    videoPageUrl: playlistUrl
+  };
+}
 
 }
 
