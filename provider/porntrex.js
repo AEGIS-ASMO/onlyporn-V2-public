@@ -88,6 +88,10 @@ class PorntrexProvider extends Provider {
 
   async parseVideoPage({ id, html }) {
 
+  if (id.includes("/embed/")) {
+  return { videoPageUrl: id };
+}
+
   const videoIdMatch = id.match(/\d+/);
 
   if (!videoIdMatch) {
