@@ -213,21 +213,7 @@ async fetchJson(url) {
           name: 'DASH'
         }]
       };
-    }
-
-    const mp4 = html.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
-    if (mp4) {
-      return {
-  streams: [{
-    type: 'movie',
-    url: this.cleanUrl(mp4[0]),
-    name: 'MP4',
-    behaviorHints: {
-      notWebReady: false
-    }
-  }]
-};
-    }
+    } 
 
     const meta = await this.parseVideoPage({ id, html });
 
@@ -250,6 +236,20 @@ if (meta.videoPageUrl.includes('/embed/')) {
   }
 
 }
+
+const mp4 = html.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
+    if (mp4) {
+      return {
+  streams: [{
+    type: 'movie',
+    url: this.cleanUrl(mp4[0]),
+    name: 'MP4',
+    behaviorHints: {
+      notWebReady: false
+    }
+  }]
+};
+    }
 
 return this.getStreams(meta);
 }
