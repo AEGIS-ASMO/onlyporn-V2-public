@@ -2,6 +2,7 @@ const { load } = require('cheerio');
 const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
+const fetch = require("node-fetch");
 
 class PorntrexProvider extends Provider {
 
@@ -96,7 +97,33 @@ fixLooseJson(looseJsonString) {
   return jsonString;
 }
 
+async resolveStream(url) {
+  try {
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "manual"
+    });
+
+    const location = res.headers.get("location");
+
+    if (location) {
+      logger.debug("Resolved stream redirect:", location);
+      return location;
+    }
+
+    return url;
+  } catch (err) {
+    logger.error("Porntrex redirect resolve failed:", err);
+    return url;
+  }
+}
+
   async parseVideoPage({ id, html }) {
+
+// Prevent re-parsing direct stream URLs
+  if (id.includes("get_file")) {
+    return { videoPageUrl: id };
+  }
 
   const videoIdMatch = id.match(/\d+/);
   if (!videoIdMatch) return null;
@@ -105,6 +132,9 @@ fixLooseJson(looseJsonString) {
 
   const embedUrl = `${this.baseUrl}embed/${videoId}`;
   const embedHtml = await this.fetchHtml(embedUrl);
+
+const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
+const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
 
   const match = embedHtml.match(/video_url:\s*'([^']+)'/);
 
@@ -121,28 +151,28 @@ fixLooseJson(looseJsonString) {
 
   const $ = load(html);
 
-  const title =
-    $('meta[property="og:title"]').attr("content") ||
-    $("title").text().replace(/\s*-\s*Porntrex/i, "").trim();
+  const title = titleMatch ? titleMatch[1] : "Porntrex Video";
 
-  let poster = $('meta[property="og:image"]').attr("content");
+let poster = previewMatch ? previewMatch[1] : null;
 
-  if (poster && poster.startsWith("//")) {
-    poster = "https:" + poster;
-  }
+if (poster && poster.startsWith("//")) {
+  poster = "https:" + poster;
+}
 
-  return {
-    metaResponse: new meta.MetaResponse(
-      id,
-      "movie",
-      title,
-      {
-        description: title,
-        background: poster
-      }
-    ),
-    videoPageUrl: videoUrl
-  };
+  const finalStream = await this.resolveStream(videoUrl);
+
+return {
+  metaResponse: new meta.MetaResponse(
+    id,
+    "movie",
+    title,
+    {
+      description: title,
+      background: poster
+    }
+  ),
+  videoPageUrl: finalStream
+};
 }
 
 }
