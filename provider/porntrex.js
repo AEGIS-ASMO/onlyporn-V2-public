@@ -126,14 +126,16 @@ logger.debug({
 
 let streams = [];
 
+let playlistUrl = null;
+
 if (playlistMatch) {
 
-  let playlistUrl = playlistMatch[1] || playlistMatch[0];
+  playlistUrl = playlistMatch[1] || playlistMatch[0];
 
-playlistUrl = playlistUrl
-  .replace(/\\\//g, "/")
-  .replace(/"/g, "")
-  .trim();
+  playlistUrl = playlistUrl
+    .replace(/\\\//g, "/")
+    .replace(/"/g, "")
+    .trim();
 
 playlistUrl = this.cleanUrl(playlistUrl);
 
@@ -245,7 +247,7 @@ if (!streams.length) {
       background: poster
     }
   ),
-  videoPageUrl: playlistUrl
+  videoPageUrl: playlistUrl || null
 };
   }
 
