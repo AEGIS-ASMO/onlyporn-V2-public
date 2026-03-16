@@ -217,7 +217,7 @@ async fetchJson(url) {
 
     const meta = await this.parseVideoPage({ id, html });
 
-if (!meta || !meta.videoPageUrl) {
+if (!meta) {
   return { streams: [] };
 }
 
@@ -225,33 +225,46 @@ if (!meta || !meta.videoPageUrl) {
  If provider returns an embed page instead of playlist,
  extract playlist from it.
 */
-if (meta.videoPageUrl.includes('/embed/')) {
+if (meta.videoPageUrl && meta.videoPageUrl.includes('/embed/')) {
 
   const embedHtml = await this.fetchHtml(meta.videoPageUrl);
 
-  const m3u8 = embedHtml.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
+  const m3u8 = embedHtml.match(/(?:https?:)?\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
 
   if (m3u8) {
-    meta.videoPageUrl = this.cleanUrl(m3u8[0]);
+
+    let url = m3u8[0];
+
+    if (url.startsWith("//")) {
+      url = "https:" + url;
+    }
+
+    meta.videoPageUrl = this.cleanUrl(url);
   }
 
 }
 
-const mp4 = html.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
-    if (mp4) {
-      return {
-  streams: [{
-    type: 'movie',
-    url: this.cleanUrl(mp4[0]),
-    name: 'MP4',
-    behaviorHints: {
-      notWebReady: false
-    }
-  }]
-};
-    }
+const result = await this.getStreams(meta);
 
-return this.getStreams(meta);
+if (result.streams && result.streams.length) {
+  return result;
+}
+
+const mp4 = html.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
+if (mp4) {
+  return {
+    streams: [{
+      type: 'movie',
+      url: this.cleanUrl(mp4[0]),
+      name: 'MP4',
+      behaviorHints: {
+        notWebReady: false
+      }
+    }]
+  };
+}
+
+return { streams: [] };
 }
 
   getStreams(meta) {
