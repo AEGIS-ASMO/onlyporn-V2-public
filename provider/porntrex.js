@@ -101,7 +101,7 @@ async resolveStream(url) {
   try {
     const res = await fetch(url, {
       method: "HEAD",
-      redirect: "follow"
+      redirect: "manual"
     });
 
     const location = res.headers.get("location");
@@ -118,62 +118,12 @@ async resolveStream(url) {
   }
 }
 
-async buildQualityStreams(url) {
-
-  const streams = [];
-
-  try {
-
-    const base = url.substring(0, url.lastIndexOf("/") + 1);
-    const idMatch = url.match(/(\d+)\.mp4/);
-
-    if (!idMatch) return [];
-
-    const id = idMatch[1];
-
-    const qualities = [
-      { file: `${id}.mp4`, name: "480p" },
-      { file: `${id}_720p.mp4`, name: "720p" },
-      { file: `${id}_1080p.mp4`, name: "1080p" },
-      { file: `${id}_2160p.mp4`, name: "4K" }
-    ];
-
-    for (const q of qualities) {
-
-      const testUrl = base + q.file;
-
-      try {
-
-        const res = await fetch(testUrl, {
-  method: "HEAD",
-  timeout: 5000
-});
-
-        if (res.status === 200) {
-          streams.push({
-            url: testUrl,
-            name: `Porntrex ${q.name}`,
-            type: Provider.TYPE
-          });
-        }
-
-      } catch {}
-
-    }
-
-  } catch (err) {
-    logger.error("Porntrex quality probe failed:", err);
-  }
-
-  return streams;
-}
-
   async parseVideoPage({ id, html }) {
 
 // Prevent re-parsing direct stream URLs
   if (id.includes("get_file")) {
-  return { streams: [{ url: id, name: "Porntrex Auto", type: Provider.TYPE }] };
-}
+    return { videoPageUrl: id };
+  }
 
   const videoIdMatch = id.match(/\d+/);
   if (!videoIdMatch) return null;
@@ -211,16 +161,6 @@ if (poster && poster.startsWith("//")) {
 
   const finalStream = await this.resolveStream(videoUrl);
 
-const streams = await this.buildQualityStreams(finalStream);
-
-if (streams.length === 0) {
-  streams.push({
-    url: finalStream,
-    name: "Porntrex Auto",
-    type: Provider.TYPE
-  });
-}
-
 return {
   metaResponse: new meta.MetaResponse(
     id,
@@ -231,7 +171,7 @@ return {
       background: poster
     }
   ),
-  streams
+  videoPageUrl: finalStream
 };
 }
 
