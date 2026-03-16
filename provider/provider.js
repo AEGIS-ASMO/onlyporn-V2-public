@@ -231,8 +231,28 @@ async fetchJson(url) {
 
     const meta = await this.parseVideoPage({ id, html });
 
-    return this.getStreams(meta);
+if (!meta || !meta.videoPageUrl) {
+  return { streams: [] };
+}
+
+/*
+ If provider returns an embed page instead of playlist,
+ extract playlist from it.
+*/
+if (meta.videoPageUrl.includes('/embed/')) {
+
+  const embedHtml = await this.fetchHtml(meta.videoPageUrl);
+
+  const m3u8 = embedHtml.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
+
+  if (m3u8) {
+    meta.videoPageUrl = this.cleanUrl(m3u8[0]);
   }
+
+}
+
+return this.getStreams(meta);
+}
 
   getStreams(meta) {
 
