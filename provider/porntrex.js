@@ -116,7 +116,9 @@ class PorntrexProvider extends Provider {
     // Extract playlist URL
 const playlistMatch =
   embedHtml.match(/"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i) ||
-  embedHtml.match(/file\s*:\s*"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i);
+  embedHtml.match(/file"\s*:\s*"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i) ||
+  embedHtml.match(/file\s*:\s*"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i) ||
+  embedHtml.match(/hls\s*:\s*"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i);
 
 // Debug
 logger.debug({
@@ -137,9 +139,10 @@ if (playlistMatch) {
     .replace(/"/g, "")
     .trim();
 
-playlistUrl = this.cleanUrl(playlistUrl);
+  playlistUrl = this.cleanUrl(playlistUrl);
 
-logger.debug("Porntrex playlist URL: " + playlistUrl);
+  logger.debug("Porntrex HLS detected: " + playlistUrl);
+}
 
   try {
 
