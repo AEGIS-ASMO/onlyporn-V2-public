@@ -164,9 +164,24 @@ class XvideosProvider extends Provider {
 logger.debug({ videoPageUrl }, 'XVideos extracted video URL');
 
     return {
-      metaResponse,
-      videoPageUrl
-    };
+  metaResponse,
+  streams: [
+    {
+      name: "XVideos",
+      url: videoPageUrl,
+      type: Provider.TYPE,
+      behaviorHints: {
+        notWebReady: true,
+        proxyHeaders: {
+          request: {
+            Referer: "https://www.xvideos.com/",
+            Origin: "https://www.xvideos.com"
+          }
+        }
+      }
+    }
+  ]
+};
   }
 
   async processStreams({ id }) {
