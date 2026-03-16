@@ -96,26 +96,13 @@ class PorntrexProvider extends Provider {
   }
 
   const videoId = videoIdMatch[0];
-  const embedUrl = `${this.baseUrl}embed/${videoId}`;
 
-  const embedHtml = await this.fetchHtml(embedUrl);
+  // Only return embed URL — provider.js will fetch it
+  const embedMatch = html.match(/\/embed\/\d+/);
 
-  let playlistUrl = null;
-
-const sourceMatch = embedHtml.match(/file\s*:\s*["']((?:https?:)?\/\/[^"']+\.m3u8[^"']*)["']/i);
-
-if (sourceMatch) {
-
-  let url = sourceMatch[1];
-
-  if (url.startsWith("//")) {
-    url = "https:" + url;
-  }
-
-  playlistUrl = this.cleanUrl(url);
-
-  logger.info("Porntrex playlist found: " + playlistUrl);
-}
+const embedUrl = embedMatch
+  ? this.baseUrl.replace(/\/$/, '') + embedMatch[0]
+  : `${this.baseUrl}embed/${videoId}`;
 
   const $ = load(html);
 
@@ -134,17 +121,17 @@ if (sourceMatch) {
   }
 
   return {
-  metaResponse: new meta.MetaResponse(
-    id,
-    "movie",
-    title,
-    {
-      description,
-      background: poster
-    }
-  ),
-  videoPageUrl: playlistUrl
-};
+    metaResponse: new meta.MetaResponse(
+      id,
+      "movie",
+      title,
+      {
+        description,
+        background: poster
+      }
+    ),
+    videoPageUrl: embedUrl
+  };
 }
 
 }
