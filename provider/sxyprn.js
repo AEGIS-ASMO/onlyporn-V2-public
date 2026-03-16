@@ -146,76 +146,93 @@ class SxyprnProvider extends Provider {
 
   parseVideoPage({ id, html }) {
 
-    const $ = load(html);
+  const $ = load(html);
 
-    const title =
-      $('meta[property="og:title"]').attr('content');
+  const title =
+    $('meta[property="og:title"]').attr('content');
 
-    const poster =
-      'https:' + $('meta[property="og:image"]').attr('content');
+  const poster =
+    'https:' + $('meta[property="og:image"]').attr('content');
 
-    const description =
-      $('meta[property="og:description"]').attr('content');
+  const description =
+    $('meta[property="og:description"]').attr('content');
 
-    let videoUrl = null;
+  let videoUrl = null;
 
-    /* ---------- METHOD 1: normal video tag ---------- */
+  /* -------- DIRECT VIDEO TAG -------- */
 
-    const videoTag = $('video source').attr('src');
+  const videoTag = $('video source').attr('src');
 
-    if (videoTag) {
-      videoUrl = videoTag.startsWith('http')
-        ? videoTag
-        : 'https:' + videoTag;
-    }
+  if (videoTag) {
+    videoUrl = videoTag.startsWith('http')
+      ? videoTag
+      : 'https:' + videoTag;
+  }
 
-    /* ---------- METHOD 2: scripts ---------- */
+  /* -------- SXyPRN CDN METHOD -------- */
 
-    if (!videoUrl) {
+  if (!videoUrl) {
 
-      const scripts = $('script')
-        .map((i, el) => $(el).html())
-        .get()
-        .join('\n');
+    try {
 
-      const match = scripts.match(/(https?:\/\/[^"]+\.mp4)/);
+      const parts = html.split("class='vidsnfo'");
 
-      if (match) videoUrl = match[1];
-    }
+      if (parts.length > 1) {
 
-    /* ---------- METHOD 3: Sxyprn CDN decrypt ---------- */
+        let buffer = parts[1].split("></span>");
 
-    if (!videoUrl) {
+        let linkstream = buffer[0];
 
-      const vidsnfo = $("span.vidsnfo").text();
+        buffer = linkstream.split(":");
 
-      if (vidsnfo) {
+        linkstream = buffer[1];
 
-        const buffer = vidsnfo.split(':');
+        if (linkstream) {
 
-        if (buffer.length > 1) {
+          const segments = linkstream.split('/');
 
-          const encodedPath = buffer[1].trim();
+          if (segments.length >= 8) {
 
-          videoUrl = decryptSxyprnPath(encodedPath);
+            const digitSum = s =>
+              String(s)
+                .replace(/\D/g, '')
+                .split('')
+                .reduce((a, b) => a + Number(b), 0);
+
+            let c = parseInt(segments[5]);
+
+            const a = digitSum(segments[6]);
+            const b = digitSum(segments[7]);
+
+            segments[5] = String(c - (a + b));
+
+            videoUrl =
+              'https://www.sxyprn.com' + segments.join('/');
+
+          }
         }
       }
+
+    } catch (e) {
+      logger.error(e, 'Sxyprn decrypt error');
     }
 
-    logger.debug({ videoUrl }, 'Sxyprn final video');
-
-    return new meta.MetaResponse(
-      id,
-      Provider.TYPE,
-      title,
-      {
-        description,
-        poster,
-        background: poster,
-        videoPageUrl: videoUrl,
-      },
-    );
   }
+
+  logger.debug({ videoUrl }, 'Sxyprn final video');
+
+  return new meta.MetaResponse(
+    id,
+    Provider.TYPE,
+    title,
+    {
+      description,
+      poster,
+      background: poster,
+      videoPageUrl: videoUrl,
+    },
+  );
+}
 
   async getStreams(meta) {
 
