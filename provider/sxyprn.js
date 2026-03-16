@@ -171,31 +171,34 @@ class SxyprnProvider extends Provider {
 
       /* ---------------- LULUSTREAM ---------------- */
 
-      if (url.includes('luluvdo') || url.includes('lulustream')) {
+if (url.includes('luluvdo') || url.includes('lulustream')) {
 
-        const idMatch = url.match(/\/([a-z0-9]+)$/i);
+  const idMatch = url.match(/\/([a-z0-9]+)$/i);
 
-        if (idMatch) {
+  if (idMatch) {
 
-          const embedUrl = `https://luluvdo.com/e/${idMatch[1]}`;
+    const embedUrl = `https://luluvdo.com/e/${idMatch[1]}`;
 
-          const html = await this.fetchHtml(embedUrl);
+    const html = await this.fetchHtml(embedUrl);
 
-          const match = html.match(/file:\s*"([^"]+\.mp4[^"]*)"/);
+    let match =
+      html.match(/sources:\s*\[\{file:"([^"]+)"/) ||
+      html.match(/file:\s*"([^"]+)"/) ||
+      html.match(/"file":"([^"]+)"/);
 
-          if (match) {
+    if (match) {
 
-            return {
-              streams: [{
-                type: Provider.TYPE,
-                url: match[1],
-                name: 'Lulustream',
-              }],
-            };
+      return {
+        streams: [{
+          type: Provider.TYPE,
+          url: match[1],
+          name: 'Lulustream 720p',
+        }],
+      };
 
-          }
-        }
-      }
+    }
+  }
+}
 
       /* ---------------- STREAMTAPE ---------------- */
 
