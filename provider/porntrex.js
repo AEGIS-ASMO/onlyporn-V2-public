@@ -88,37 +88,36 @@ class PorntrexProvider extends Provider {
 
   async parseVideoPage({ id, html }) {
 
-  if (id.includes("/embed/")) {
-  return { videoPageUrl: id };
-}
-
   const videoIdMatch = id.match(/\d+/);
-
-  if (!videoIdMatch) {
-    logger.warn("Porntrex: invalid video id");
-    return null;
-  }
+  if (!videoIdMatch) return null;
 
   const videoId = videoIdMatch[0];
 
-  // Only return embed URL — provider.js will fetch it
-  const embedMatch = html.match(/\/embed\/\d+/);
+  const embedUrl = `${this.baseUrl}embed/${videoId}`;
+  const embedHtml = await this.fetchHtml(embedUrl);
 
-const embedUrl = embedMatch
-  ? this.baseUrl.replace(/\/$/, '') + embedMatch[0]
-  : `${this.baseUrl}embed/${videoId}`;
+  let playlistUrl = null;
+
+  const m3u8Match =
+    embedHtml.match(/file\s*:\s*["']((?:https?:)?\/\/[^"']+\.m3u8[^"']*)["']/i) ||
+    embedHtml.match(/video_url\s*:\s*["']((?:https?:)?\/\/[^"']+\.m3u8[^"']*)["']/i) ||
+    embedHtml.match(/(?:https?:)?\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
+
+  if (m3u8Match) {
+    playlistUrl = m3u8Match[1] || m3u8Match[0];
+
+    if (playlistUrl.startsWith("//")) {
+      playlistUrl = "https:" + playlistUrl;
+    }
+  }
 
   const $ = load(html);
 
   const title =
     $('meta[property="og:title"]').attr("content") ||
-    $("title").text().replace(/\s*-\s*Porntrex/i, "").trim() ||
-    "Porntrex Video";
+    $("title").text().replace(/\s*-\s*Porntrex/i, "").trim();
 
-  const description =
-    $('meta[name="description"]').attr("content") || title;
-
-  let poster = $('meta[property="og:image"]').attr("content") || null;
+  let poster = $('meta[property="og:image"]').attr("content");
 
   if (poster && poster.startsWith("//")) {
     poster = "https:" + poster;
@@ -130,11 +129,11 @@ const embedUrl = embedMatch
       "movie",
       title,
       {
-        description,
+        description: title,
         background: poster
       }
     ),
-    videoPageUrl: embedUrl
+    videoPageUrl: playlistUrl
   };
 }
 
