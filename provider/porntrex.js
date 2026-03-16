@@ -96,20 +96,19 @@ class PorntrexProvider extends Provider {
   const embedUrl = `${this.baseUrl}embed/${videoId}`;
   const embedHtml = await this.fetchHtml(embedUrl);
 
-  let playlistUrl = null;
+  const regex = /var flashvars = (\{[\s\S]*?\});/;
+  const match = embedHtml.match(regex);
 
-  const m3u8Match =
-    embedHtml.match(/file\s*:\s*["']((?:https?:)?\/\/[^"']+\.m3u8[^"']*)["']/i) ||
-    embedHtml.match(/video_url\s*:\s*["']((?:https?:)?\/\/[^"']+\.m3u8[^"']*)["']/i) ||
-    embedHtml.match(/(?:https?:)?\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
-
-  if (m3u8Match) {
-    playlistUrl = m3u8Match[1] || m3u8Match[0];
-
-    if (playlistUrl.startsWith("//")) {
-      playlistUrl = "https:" + playlistUrl;
-    }
+  if (!match) {
+    logger.error("Porntrex: flashvars not found");
+    return null;
   }
+
+  const data = JSON.parse(
+    this.fixLooseJson(match[1])
+  );
+
+  let videoUrl = data.video_url;
 
   const $ = load(html);
 
@@ -133,7 +132,7 @@ class PorntrexProvider extends Provider {
         background: poster
       }
     ),
-    videoPageUrl: playlistUrl
+    videoPageUrl: videoUrl
   };
 }
 
