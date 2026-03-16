@@ -106,19 +106,18 @@ fixLooseJson(looseJsonString) {
   const embedUrl = `${this.baseUrl}embed/${videoId}`;
   const embedHtml = await this.fetchHtml(embedUrl);
 
-  const regex = /var flashvars = (\{[\s\S]*?\});/;
-  const match = embedHtml.match(regex);
+  const match = embedHtml.match(/video_url:\s*'([^']+)'/);
 
   if (!match) {
-    logger.error("Porntrex: flashvars not found");
+    logger.error("Porntrex: video_url not found");
     return null;
   }
 
-  const data = JSON.parse(
-    this.fixLooseJson(match[1])
-  );
+  let videoUrl = match[1];
 
-  let videoUrl = data.video_url;
+  if (videoUrl.startsWith("//")) {
+    videoUrl = "https:" + videoUrl;
+  }
 
   const $ = load(html);
 
