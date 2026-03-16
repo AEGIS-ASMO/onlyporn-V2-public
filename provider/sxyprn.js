@@ -47,23 +47,22 @@ class SxyprnProvider extends Provider {
 
   handlePagination(url, { extra: { skip } }) {
 
-  const page = this.page(skip);
+    const page = this.page(skip);
 
-  // normalize url (prevent double domain)
-  if (url.startsWith(this.baseUrl)) {
-    url = url.replace(this.baseUrl, '');
+    if (url.startsWith(this.baseUrl)) {
+      url = url.replace(this.baseUrl, '');
+    }
+
+    if (!url.startsWith('/')) {
+      url = '/' + url;
+    }
+
+    if (url.includes('?')) {
+      return `${url}&page=${page}`;
+    }
+
+    return `${url}?page=${page}`;
   }
-
-  if (!url.startsWith('/')) {
-    url = '/' + url;
-  }
-
-  if (url.includes('?')) {
-    return `${url}&page=${page}`;
-  }
-
-  return `${url}?page=${page}`;
-}
 
   getCatalogMetas(html) {
 
@@ -135,14 +134,10 @@ class SxyprnProvider extends Provider {
 
     let externalUrl = null;
 
-    // PRIMARY METHOD (most reliable)
     const ext = $('a.extlink[href]').first().attr('href');
 
-    if (ext) {
-      externalUrl = ext;
-    }
+    if (ext) externalUrl = ext;
 
-    // BACKUP METHOD (inside textarea)
     if (!externalUrl) {
       const textarea = $('textarea.PostEditTA').text();
       const match = textarea.match(/https?:\/\/[^\s]+/);
@@ -170,14 +165,119 @@ class SxyprnProvider extends Provider {
       return { streams: [] };
     }
 
+    let url = meta.videoPageUrl;
+
+    try {
+
+      /* ---------------- LULUSTREAM ---------------- */
+
+      if (url.includes('luluvdo') || url.includes('lulustream')) {
+
+        const idMatch = url.match(/\/([a-z0-9]+)$/i);
+
+        if (idMatch) {
+
+          const embedUrl = `https://luluvdo.com/e/${idMatch[1]}`;
+
+          const html = await this.fetchHtml(embedUrl);
+
+          const match = html.match(/file:\s*"([^"]+\.mp4[^"]*)"/);
+
+          if (match) {
+
+            return {
+              streams: [{
+                type: Provider.TYPE,
+                url: match[1],
+                name: 'Lulustream',
+              }],
+            };
+
+          }
+        }
+      }
+
+      /* ---------------- STREAMTAPE ---------------- */
+
+      if (url.includes('streamtape')) {
+
+        const html = await this.fetchHtml(url);
+
+        const match = html.match(/robotlink'\)\.innerHTML = '(.*)'/);
+
+        if (match) {
+
+          const video = 'https:' + match[1].split("'")[0];
+
+          return {
+            streams: [{
+              type: Provider.TYPE,
+              url: video,
+              name: 'Streamtape',
+            }],
+          };
+
+        }
+      }
+
+      /* ---------------- DOODSTREAM ---------------- */
+
+      if (url.includes('dood')) {
+
+        const html = await this.fetchHtml(url);
+
+        const match = html.match(/pass_md5\/(.*?)'/);
+
+        if (match) {
+
+          const pass = `https://doodstream.com/pass_md5/${match[1]}`;
+
+          const token = await this.fetchHtml(pass);
+
+          const video = token + '123456789';
+
+          return {
+            streams: [{
+              type: Provider.TYPE,
+              url: video,
+              name: 'DoodStream',
+            }],
+          };
+
+        }
+      }
+
+      /* ---------------- FILEMOON ---------------- */
+
+      if (url.includes('filemoon')) {
+
+        const html = await this.fetchHtml(url);
+
+        const match = html.match(/file:"([^"]+)"/);
+
+        if (match) {
+
+          return {
+            streams: [{
+              type: Provider.TYPE,
+              url: match[1],
+              name: 'Filemoon',
+            }],
+          };
+
+        }
+      }
+
+    } catch (err) {
+      logger.error(err, 'Host resolver failed');
+    }
+
     return {
-      streams: [
-        {
-          type: Provider.TYPE,
-          url: meta.videoPageUrl,
-          name: 'External Host',
-        },
-      ],
+      streams: [{
+        type: Provider.TYPE,
+        url,
+        name: 'External Host',
+      }],
     };
   }
 }
