@@ -115,10 +115,7 @@ class PorntrexProvider extends Provider {
 
     // Extract playlist URL
 const playlistMatch =
-  embedHtml.match(/"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i) ||
-  embedHtml.match(/file"\s*:\s*"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i) ||
-  embedHtml.match(/file\s*:\s*"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i) ||
-  embedHtml.match(/hls\s*:\s*"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i);
+  embedHtml.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/i);
 
 // Debug
 logger.debug({
@@ -130,78 +127,15 @@ let streams = [];
 
 let playlistUrl = null;
 
+const playlistMatch =
+  embedHtml.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/i);
+
 if (playlistMatch) {
-
-  playlistUrl = playlistMatch[1] || playlistMatch[0];
-
-  playlistUrl = playlistUrl
-    .replace(/\\\//g, "/")
-    .replace(/"/g, "")
-    .trim();
-
-  playlistUrl = this.cleanUrl(playlistUrl);
-
+  playlistUrl = this.cleanUrl(playlistMatch[1]);
   logger.debug("Porntrex HLS detected: " + playlistUrl);
-
-  try {
-
-    const playlist = await this.fetchHtml(playlistUrl);
-
-    const lines = playlist.split("\n");
-
-let foundVariants = false;
-
-for (let i = 0; i < lines.length; i++) {
-
-  if (lines[i].includes("#EXT-X-STREAM-INF")) {
-
-    foundVariants = true;
-
-    const resolutionMatch = lines[i].match(/RESOLUTION=\d+x(\d+)/);
-
-    const quality = resolutionMatch
-      ? resolutionMatch[1] + "p"
-      : "HD";
-
-    const streamPath = lines[i + 1]?.trim();
-
-    if (!streamPath) continue;
-
-    let streamUrl;
-
-    if (streamPath.startsWith("http")) {
-      streamUrl = streamPath;
-    } else {
-      const base = playlistUrl.substring(0, playlistUrl.lastIndexOf("/") + 1);
-      streamUrl = base + streamPath;
-    }
-
-    streams.push({
-      name: "Porntrex",
-      title: quality,
-      url: streamUrl,
-      behaviorHints: { notWebReady: true }
-    });
-
-  }
-
 }
 
-// if playlist had no variants, use the playlist itself
-if (!foundVariants) {
-  streams.push({
-    name: "Porntrex",
-    title: "Auto",
-    url: playlistUrl,
-    behaviorHints: { notWebReady: true }
-  });
-}
-
-} catch (e) {
-    logger.warn("Porntrex playlist parse failed", e);
-  }
-
-streams.sort((a, b) => {
+  streams.sort((a, b) => {
   const qa = parseInt(a.title.replace("p","")) || 0;
   const qb = parseInt(b.title.replace("p","")) || 0;
   return qb - qa;
@@ -250,7 +184,7 @@ if (!streams.length) {
       background: poster
     }
   ),
-  videoPageUrl: playlistUrl || null
+  videoPageUrl: playlistUrl
 };
   }
 
