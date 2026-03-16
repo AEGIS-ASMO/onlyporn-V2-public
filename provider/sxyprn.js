@@ -126,22 +126,20 @@ class SxyprnProvider extends Provider {
 
   let videoUrl = null;
 
-  // safer mgfs extraction
+  // safer extraction from raw HTML
   const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
 
-const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
+if (mgfsMatch) {
+   const mgfsId = mgfsMatch[1];
+}
 
-logger.debug({ mgfsMatch }, 'MGFS extraction');
-
-  if (mgfsMatch) {
-
-    const mgfs = mgfsMatch[1];
-
+    // rotate CDN server
     const cdn = Math.floor(Math.random() * 3) + 1;
 
     videoUrl =
       `https://b${cdn}.trafficdeposit.com/hls/${mgfs}/master.m3u8`;
 
+    logger.debug({ mgfs, videoUrl }, 'Sxyprn stream found');
   }
 
   return new meta.MetaResponse(
