@@ -118,31 +118,66 @@ class PorntrexProvider extends Provider {
       embedPreview: embedHtml.substring(0, 400)
     }, "Porntrex embed preview");
 
-    // Extract streams
-    const streams = [
-      ...embedHtml.matchAll(/file\s*:\s*["']([^"']+)["']/g),
-      ...embedHtml.matchAll(/src\s*:\s*["']([^"']+)["']/g)
-    ];
+    // Extract playlist URL
+const playlistMatch = embedHtml.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
 
-    if (!streams.length) {
-      const fallback = embedHtml.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
-      if (fallback) {
-        streams.push([null, fallback[0]]);
+let streams = [];
+
+if (playlistMatch) {
+
+  let playlistUrl = playlistMatch[0];
+
+  if (playlistUrl.startsWith("//")) {
+    playlistUrl = "https:" + playlistUrl;
+  }
+
+  playlistUrl = this.cleanUrl(playlistUrl);
+
+  try {
+
+    const playlist = await this.fetchHtml(playlistUrl);
+
+    const lines = playlist.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+
+      if (lines[i].includes("RESOLUTION=")) {
+
+        const resolutionMatch = lines[i].match(/RESOLUTION=\d+x(\d+)/);
+
+        const quality = resolutionMatch
+          ? resolutionMatch[1] + "p"
+          : "HD";
+
+        const streamPath = lines[i + 1]?.trim();
+
+        if (!streamPath) continue;
+
+        let streamUrl;
+
+        if (streamPath.startsWith("http")) {
+          streamUrl = streamPath;
+        } else {
+          const base = playlistUrl.substring(0, playlistUrl.lastIndexOf("/") + 1);
+          streamUrl = base + streamPath;
+        }
+
+        streams.push({
+          name: "Porntrex",
+          title: quality,
+          url: streamUrl,
+          behaviorHints: { notWebReady: true }
+        });
+
       }
+
     }
 
-    let videoPageUrl = null;
+  } catch (e) {
+    logger.warn("Porntrex playlist parse failed", e);
+  }
 
-    if (streams.length) {
-      const urls = streams.map(s => s[1]);
-
-      // Prefer HLS playlist
-const m3u8 = urls.find(u => u.includes(".m3u8"));
-
-if (m3u8) {
-  videoPageUrl = m3u8;
-} else {
-
+}
   // fallback to best MP4
   urls.sort((a, b) => {
     const qa = parseInt(a.match(/(\d{3,4})p/)?.[1] || 0);
@@ -187,7 +222,7 @@ if (m3u8) {
           background: poster
         }
       ),
-      videoPageUrl
+      streams
     };
   }
 
