@@ -47,14 +47,23 @@ class SxyprnProvider extends Provider {
 
   handlePagination(url, { extra: { skip } }) {
 
-    const page = this.page(skip);
+  const page = this.page(skip);
 
-    if (url.includes('?')) {
-      return `${url}&page=${page}`;
-    }
-
-    return `${url}?page=${page}`;
+  // normalize url (prevent double domain)
+  if (url.startsWith(this.baseUrl)) {
+    url = url.replace(this.baseUrl, '');
   }
+
+  if (!url.startsWith('/')) {
+    url = '/' + url;
+  }
+
+  if (url.includes('?')) {
+    return `${url}&page=${page}`;
+  }
+
+  return `${url}?page=${page}`;
+}
 
   getCatalogMetas(html) {
 
