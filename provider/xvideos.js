@@ -85,14 +85,8 @@ class XvideosProvider extends Provider {
     return metadatas;
   }
 
-  async getMetadata({ id }) {
-
-  const html = await this.fetchHtml(id);
-
-  const parsed = this.parseVideoPage({ id, html });
-
-  return parsed.metaResponse;
-
+  async getMetadata(args) {
+  return super.getMetadata(args);
 }
 
   parseVideoPage({ id, html }) {
@@ -113,59 +107,31 @@ class XvideosProvider extends Provider {
     });
 
     const regexVideoHLS = /html5player\.setVideoHLS\(['"]([^'"]+)['"]\)/;
-const regexVideoHigh2 = /html5player\.setVideoUrlHigh2\(['"]([^'"]+)['"]\)/;
-const regexVideoHigh = /html5player\.setVideoUrlHigh\(['"]([^'"]+)['"]\)/;
-const regexVideoLow = /html5player\.setVideoUrlLow\(['"]([^'"]+)['"]\)/;
-const regexThumbnail = /html5player\.setThumbUrl169\(['"]([^'"]+)['"]\)/;
+    const regexVideoHigh = /html5player\.setVideoUrlHigh\(['"]([^'"]+)['"]\)/;
+    const regexVideoLow = /html5player\.setVideoUrlLow\(['"]([^'"]+)['"]\)/;
+    const regexThumbnail = /html5player\.setThumbUrl169\(['"]([^'"]+)['"]\)/;
 
+    let videoPageUrl = '';
     let background = '';
-let streams = [];
-let match;
 
-match = html.match(regexVideoHigh);
-if (match && match[1]) {
-  streams.push({
-    name: "XVideos 720p",
-    url: match[1].replace(/\\\//g, '/'),
-    type: Provider.TYPE
-  });
+    let match = html.match(regexVideoHLS);
+    if (match && match[1]) {
+  videoPageUrl = match[1].replace(/\\\//g, '/');
 }
 
-match = html.match(regexVideoHigh2);
-if (match && match[1]) {
-  streams.push({
-    name: "XVideos 1080p",
-    url: match[1].replace(/\\\//g, '/'),
-    type: Provider.TYPE
-  });
+    if (!videoPageUrl) {
+      match = html.match(regexVideoHigh);
+      if (match && match[1]) {
+  videoPageUrl = match[1].replace(/\\\//g, '/');
 }
-
-match = html.match(regexVideoLow);
-if (match && match[1]) {
-  streams.push({
-    name: "XVideos 480p",
-    url: match[1].replace(/\\\//g, '/'),
-    type: Provider.TYPE
-  });
-}
-
-match = html.match(regexVideoHLS);
-if (match && match[1]) {
-  streams.push({
-    name: "XVideos Adaptive",
-    url: match[1].replace(/\\\//g, '/'),
-    type: "hls",
-    behaviorHints: {
-      notWebReady: true,
-      proxyHeaders: {
-        request: {
-          Referer: "https://www.xvideos.com/",
-          Origin: "https://www.xvideos.com"
-        }
-      }
     }
-  });
+
+    if (!videoPageUrl) {
+      match = html.match(regexVideoLow);
+      if (match && match[1]) {
+  videoPageUrl = match[1].replace(/\\\//g, '/');
 }
+    }
 
     match = html.match(regexThumbnail);
     if (match && match[1]) {
@@ -195,12 +161,12 @@ if (match && match[1]) {
       }
     );
 
-logger.debug({ streams }, 'XVideos extracted streams');
+logger.debug({ videoPageUrl }, 'XVideos extracted video URL');
 
     return {
-  metaResponse,
-  streams
-};
+      metaResponse,
+      videoPageUrl
+    };
   }
 
   async processStreams({ id }) {
@@ -209,11 +175,13 @@ logger.debug({ streams }, 'XVideos extracted streams');
 
   const metaData = this.parseVideoPage({ id, html });
 
-  logger.debug({ streams: metaData.streams }, 'XVideos stream source');
+  logger.debug({ videoPageUrl: metaData.videoPageUrl }, 'XVideos stream source');
 
-  if (metaData?.streams?.length) {
-  return { streams: metaData.streams };
-}
+  let streamsResponse = await super.getStreams(metaData);
+
+  if (streamsResponse?.streams?.length) {
+    return streamsResponse;
+  }
 
   const $ = load(html);
   let streams = [];
