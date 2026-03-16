@@ -6,10 +6,10 @@ const { meta } = require('../model');
 const Provider = require('./provider');
 
 const sortByMappings = {
-  'Latest': 'latest',
-  'Trending': 'trending',
-  'Views': 'views',
-  'Orgasmic': 'orgasmic',
+  Latest: 'latest',
+  Trending: 'trending',
+  Views: 'views',
+  Orgasmic: 'orgasmic',
 };
 
 class SxyprnProvider extends Provider {
@@ -59,7 +59,6 @@ class SxyprnProvider extends Provider {
   getCatalogMetas(html) {
 
     const metadataList = [];
-
     const $ = load(html);
 
     $('.post_el_small, .thumb').each((_, element) => {
@@ -90,7 +89,7 @@ class SxyprnProvider extends Provider {
       metadataList.push(
         new meta.MetaPreview(
           videoPageUrl,
-          'movie',
+          Provider.TYPE,
           title,
           poster?.startsWith('http') ? poster : 'https:' + poster,
           { videoPageUrl },
@@ -107,8 +106,9 @@ class SxyprnProvider extends Provider {
 
     const { id } = args;
 
-    return this.fetchHtml(id)
-      .then(html => this.parseVideoPage({ id, html }));
+    const html = await this.fetchHtml(id);
+
+    return this.parseVideoPage({ id, html });
   }
 
   parseVideoPage({ id, html }) {
@@ -124,29 +124,23 @@ class SxyprnProvider extends Provider {
     const description =
       $('meta[property="og:description"]').attr('content');
 
-    let videoUrl = null;
+    let externalUrl = null;
 
-    const videoTag = $('video source').attr('src');
+    // PRIMARY METHOD (most reliable)
+    const ext = $('a.extlink[href]').first().attr('href');
 
-    if (videoTag) {
-      videoUrl = videoTag.startsWith('http')
-        ? videoTag
-        : 'https:' + videoTag;
+    if (ext) {
+      externalUrl = ext;
     }
 
-    if (!videoUrl) {
-
-      const scripts = $('script')
-        .map((i, el) => $(el).html())
-        .get()
-        .join('\n');
-
-      const regex = /(https?:\/\/[^"]+\.mp4)/;
-
-      const match = scripts.match(regex);
-
-      if (match) videoUrl = match[1];
+    // BACKUP METHOD (inside textarea)
+    if (!externalUrl) {
+      const textarea = $('textarea.PostEditTA').text();
+      const match = textarea.match(/https?:\/\/[^\s]+/);
+      if (match) externalUrl = match[0];
     }
+
+    logger.debug({ externalUrl }, 'Sxyprn external host');
 
     return new meta.MetaResponse(
       id,
@@ -156,7 +150,7 @@ class SxyprnProvider extends Provider {
         description,
         poster,
         background: poster,
-        videoPageUrl: videoUrl,
+        videoPageUrl: externalUrl,
       },
     );
   }
@@ -172,7 +166,7 @@ class SxyprnProvider extends Provider {
         {
           type: Provider.TYPE,
           url: meta.videoPageUrl,
-          name: 'OnlyPorn HD',
+          name: 'External Host',
         },
       ],
     };
