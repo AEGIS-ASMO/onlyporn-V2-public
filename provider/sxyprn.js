@@ -6,11 +6,43 @@ const { meta } = require('../model');
 const Provider = require('./provider');
 
 const sortByMappings = {
-  Latest: 'latest',
-  Trending: 'trending',
-  Views: 'views',
-  Orgasmic: 'orgasmic',
+  'Latest': 'latest',
+  'Trending': 'trending',
+  'Views': 'views',
+  'Orgasmic': 'orgasmic',
 };
+
+/* ---------------- HELPERS ---------------- */
+
+function digitSum(str) {
+  return String(str)
+    .replace(/\D/g, '')
+    .split('')
+    .reduce((a, b) => a + Number(b), 0);
+}
+
+function decryptSxyprnPath(path) {
+  try {
+
+    const parts = path.split('/');
+
+    if (parts.length < 8) return null;
+
+    const c = parseInt(parts[5]);
+    const a = digitSum(parts[6]);
+    const b = digitSum(parts[7]);
+
+    parts[5] = String(c - (a + b));
+
+    return 'https://www.sxyprn.com' + parts.join('/');
+
+  } catch (e) {
+    logger.error(e, 'Sxyprn decrypt failed');
+    return null;
+  }
+}
+
+/* ---------------- PROVIDER ---------------- */
 
 class SxyprnProvider extends Provider {
 
@@ -49,14 +81,6 @@ class SxyprnProvider extends Provider {
 
     const page = this.page(skip);
 
-    if (url.startsWith(this.baseUrl)) {
-      url = url.replace(this.baseUrl, '');
-    }
-
-    if (!url.startsWith('/')) {
-      url = '/' + url;
-    }
-
     if (url.includes('?')) {
       return `${url}&page=${page}`;
     }
@@ -67,6 +91,7 @@ class SxyprnProvider extends Provider {
   getCatalogMetas(html) {
 
     const metadataList = [];
+
     const $ = load(html);
 
     $('.post_el_small, .thumb').each((_, element) => {
@@ -97,7 +122,7 @@ class SxyprnProvider extends Provider {
       metadataList.push(
         new meta.MetaPreview(
           videoPageUrl,
-          Provider.TYPE,
+          'movie',
           title,
           poster?.startsWith('http') ? poster : 'https:' + poster,
           { videoPageUrl },
@@ -132,19 +157,52 @@ class SxyprnProvider extends Provider {
     const description =
       $('meta[property="og:description"]').attr('content');
 
-    let externalUrl = null;
+    let videoUrl = null;
 
-    const ext = $('a.extlink[href]').first().attr('href');
+    /* ---------- METHOD 1: normal video tag ---------- */
 
-    if (ext) externalUrl = ext;
+    const videoTag = $('video source').attr('src');
 
-    if (!externalUrl) {
-      const textarea = $('textarea.PostEditTA').text();
-      const match = textarea.match(/https?:\/\/[^\s]+/);
-      if (match) externalUrl = match[0];
+    if (videoTag) {
+      videoUrl = videoTag.startsWith('http')
+        ? videoTag
+        : 'https:' + videoTag;
     }
 
-    logger.debug({ externalUrl }, 'Sxyprn external host');
+    /* ---------- METHOD 2: scripts ---------- */
+
+    if (!videoUrl) {
+
+      const scripts = $('script')
+        .map((i, el) => $(el).html())
+        .get()
+        .join('\n');
+
+      const match = scripts.match(/(https?:\/\/[^"]+\.mp4)/);
+
+      if (match) videoUrl = match[1];
+    }
+
+    /* ---------- METHOD 3: Sxyprn CDN decrypt ---------- */
+
+    if (!videoUrl) {
+
+      const vidsnfo = $("span.vidsnfo").text();
+
+      if (vidsnfo) {
+
+        const buffer = vidsnfo.split(':');
+
+        if (buffer.length > 1) {
+
+          const encodedPath = buffer[1].trim();
+
+          videoUrl = decryptSxyprnPath(encodedPath);
+        }
+      }
+    }
+
+    logger.debug({ videoUrl }, 'Sxyprn final video');
 
     return new meta.MetaResponse(
       id,
@@ -154,7 +212,7 @@ class SxyprnProvider extends Provider {
         description,
         poster,
         background: poster,
-        videoPageUrl: externalUrl,
+        videoPageUrl: videoUrl,
       },
     );
   }
@@ -165,129 +223,14 @@ class SxyprnProvider extends Provider {
       return { streams: [] };
     }
 
-    let url = meta.videoPageUrl;
-
-    try {
-
-      /* ---------------- LULUSTREAM ---------------- */
-
-if (url.includes('luluvdo') || url.includes('lulustream')) {
-
-  const idMatch = url.match(/\/([a-z0-9]+)$/i);
-
-  if (idMatch) {
-
-    const embedUrl = `https://luluvdo.com/e/${idMatch[1]}`;
-
-    const html = await this.fetchHtml(embedUrl);
-
-    let match =
-      html.match(/sources:\s*\[\{file:"([^"]+)"/) ||
-      html.match(/file:\s*"([^"]+)"/) ||
-      html.match(/"file":"([^"]+)"/);
-
-    if (match) {
-
-      return {
-        streams: [{
-          type: Provider.TYPE,
-          url: match[1],
-          name: 'Lulustream 720p',
-          behaviorHints: {
-            notWebReady: true,
-            headers: {
-              Referer: "https://luluvdo.com/",
-              "User-Agent": "Mozilla/5.0"
-            }
-          }
-        }]
-      };
-
-    }
-  }
-}
-
-      /* ---------------- STREAMTAPE ---------------- */
-
-      if (url.includes('streamtape')) {
-
-        const html = await this.fetchHtml(url);
-
-        const match = html.match(/robotlink'\)\.innerHTML = '(.*)'/);
-
-        if (match) {
-
-          const video = 'https:' + match[1].split("'")[0];
-
-          return {
-            streams: [{
-              type: Provider.TYPE,
-              url: video,
-              name: 'Streamtape',
-            }],
-          };
-
-        }
-      }
-
-      /* ---------------- DOODSTREAM ---------------- */
-
-      if (url.includes('dood')) {
-
-        const html = await this.fetchHtml(url);
-
-        const match = html.match(/pass_md5\/(.*?)'/);
-
-        if (match) {
-
-          const pass = `https://doodstream.com/pass_md5/${match[1]}`;
-
-          const token = await this.fetchHtml(pass);
-
-          const video = token + '123456789';
-
-          return {
-            streams: [{
-              type: Provider.TYPE,
-              url: video,
-              name: 'DoodStream',
-            }],
-          };
-
-        }
-      }
-
-      /* ---------------- FILEMOON ---------------- */
-
-      if (url.includes('filemoon')) {
-
-        const html = await this.fetchHtml(url);
-
-        const match = html.match(/file:"([^"]+)"/);
-
-        if (match) {
-
-          return {
-            streams: [{
-              type: Provider.TYPE,
-              url: match[1],
-              name: 'Filemoon',
-            }],
-          };
-
-        }
-      }
-
-    } catch (err) {
-      logger.error(err, 'Host resolver failed');
-    }
-
     return {
-      streams: [{
-        type: Provider.TYPE,
-        url,
-        name: 'External Host',
-      }],
+      streams: [
+        {
+          type: Provider.TYPE,
+          url: meta.videoPageUrl,
+          name: 'OnlyPorn HD',
+        },
+      ],
     };
   }
 }
