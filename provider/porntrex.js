@@ -164,9 +164,10 @@ while ((qmatch = qualityRegex.exec(embedHtml)) !== null) {
   streams.push({
     url: finalUrl,
     name: `Porntrex ${quality}`,
-    type: "mp4"
   });
 }
+
+streams.sort((a, b) => b.title.localeCompare(a.title));
 
 if (!streams.length) {
   logger.warn("Porntrex: no quality streams found");
