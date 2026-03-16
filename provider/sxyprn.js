@@ -118,8 +118,11 @@ class SxyprnProvider extends Provider {
   const title =
     $('meta[property="og:title"]').attr('content');
 
-  const poster =
-    'https:' + $('meta[property="og:image"]').attr('content');
+  let poster = $('meta[property="og:image"]').attr('content');
+
+if (poster && poster.startsWith('//')) {
+  poster = 'https:' + poster;
+}
 
   const description =
     $('meta[property="og:description"]').attr('content');
@@ -132,7 +135,7 @@ const thumb = $('meta[property="og:image"]').attr('content');
 
 let hash = null;
 
-const hashMatch = thumb?.match(/img\/([^/]+)\//);
+const hashMatch = thumb?.match(/vid\/([^/]+)\//);
 
 if (hashMatch) {
   hash = hashMatch[1];
@@ -142,7 +145,7 @@ if (mgfsMatch && hash) {
 
   const mgfs = mgfsMatch[1];
 
-  const cdnMatch = thumb?.match(/https?:\/\/b(\d)\.trafficdeposit/);
+  const cdnMatch = thumb?.match(/\/\/b(\d)\.trafficdeposit/);
 const cdn = cdnMatch ? cdnMatch[1] : 1;
 
   videoUrl =
