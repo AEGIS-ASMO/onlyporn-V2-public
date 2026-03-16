@@ -102,28 +102,21 @@ class PorntrexProvider extends Provider {
 
   let playlistUrl = null;
 
-// first try absolute m3u8
-let playlistMatch =
-  embedHtml.match(/(?:file|src)\s*[:=]\s*["'](https?:\/\/[^"']+\.m3u8[^"']*)/i)
-  || embedHtml.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/i);
-
-// if not found, check relative get_file path
-if (!playlistMatch) {
-  const relMatch = embedHtml.match(/\/get_file\/[^"' ]+\/playlist\.m3u8[^"' ]*/i);
-  if (relMatch) {
-    playlistMatch = ['https://porntrex.com' + relMatch[0]];
-  }
-}
-
-logger.debug({
-  embedPreview: embedHtml.substring(0, 400),
-  foundM3U8: playlistMatch?.[0]
-}, "Porntrex embed preview");
+const playlistMatch =
+  embedHtml.match(/["']((?:https?:)?\/\/[^"' ]+\.m3u8[^"' ]*)["']/i);
 
 if (playlistMatch) {
-  const rawUrl = playlistMatch[1] ? playlistMatch[1] : playlistMatch[0];
-playlistUrl = this.cleanUrl(rawUrl);
+  let rawUrl = playlistMatch[1];
+
+  // handle protocol-relative URLs
+  if (rawUrl.startsWith("//")) {
+    rawUrl = "https:" + rawUrl;
+  }
+
+  playlistUrl = this.cleanUrl(rawUrl);
   logger.info("Porntrex playlist found: " + playlistUrl);
+} else {
+  logger.warn("Porntrex: No playlist found in embed");
 }
 
   const $ = load(html);
