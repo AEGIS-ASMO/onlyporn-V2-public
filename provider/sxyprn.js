@@ -193,7 +193,14 @@ if (url.includes('luluvdo') || url.includes('lulustream')) {
           type: Provider.TYPE,
           url: match[1],
           name: 'Lulustream 720p',
-        }],
+          behaviorHints: {
+            notWebReady: true,
+            headers: {
+              Referer: "https://luluvdo.com/",
+              "User-Agent": "Mozilla/5.0"
+            }
+          }
+        }]
       };
 
     }
