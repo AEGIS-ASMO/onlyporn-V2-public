@@ -128,16 +128,27 @@ class SxyprnProvider extends Provider {
 
 const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
 
-if (mgfsMatch) {
+const thumb = $('meta[property="og:image"]').attr('content');
+
+let hash = null;
+
+const hashMatch = thumb?.match(/img\/([^/]+)\//);
+
+if (hashMatch) {
+  hash = hashMatch[1];
+}
+
+if (mgfsMatch && hash) {
 
   const mgfs = mgfsMatch[1];
 
-  const cdn = Math.floor(Math.random() * 4) + 1;
+  const cdnMatch = thumb?.match(/https?:\/\/b(\d)\.trafficdeposit/);
+const cdn = cdnMatch ? cdnMatch[1] : 1;
 
   videoUrl =
-    `https://b${cdn}.trafficdeposit.com/hls/${mgfs}/master.m3u8`;
+    `https://b${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
 
-  logger.debug({ mgfs, videoUrl }, "Sxyprn extracted stream");
+  logger.debug({ hash, mgfs, videoUrl }, "Sxyprn extracted stream");
 }
 
   return new meta.MetaResponse(
