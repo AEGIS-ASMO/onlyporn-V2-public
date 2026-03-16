@@ -135,7 +135,7 @@ const thumb = poster || '';
 
 let hash = null;
 
-const hashMatch = thumb?.match(/\/vid\/([^/]+)\//);
+const hashMatch = thumb?.match(/\/img\/([^/]+)\//);
 
 if (hashMatch) {
   hash = hashMatch[1];
