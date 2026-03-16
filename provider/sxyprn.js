@@ -124,15 +124,23 @@ class SxyprnProvider extends Provider {
   const description =
     $('meta[property="og:description"]').attr('content');
 
-  // extract internal player id
-  const mgfs = $('#player_el').attr('data-mgfs');
-
   let videoUrl = null;
 
-  if (mgfs) {
+  // safer mgfs extraction
+  const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
 
-    // internal video server
-    videoUrl = `https://b1.trafficdeposit.com/hls/${mgfs}/master.m3u8`;
+const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
+
+logger.debug({ mgfsMatch }, 'MGFS extraction');
+
+  if (mgfsMatch) {
+
+    const mgfs = mgfsMatch[1];
+
+    const cdn = Math.floor(Math.random() * 3) + 1;
+
+    videoUrl =
+      `https://b${cdn}.trafficdeposit.com/hls/${mgfs}/master.m3u8`;
 
   }
 
