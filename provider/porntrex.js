@@ -86,6 +86,16 @@ class PorntrexProvider extends Provider {
   return metas;
 }
 
+fixLooseJson(looseJsonString) {
+  let jsonString = looseJsonString.trim().replace(/^"(.*)"$/, '$1');
+
+  jsonString = jsonString.replace(/'/g, '"');
+  jsonString = jsonString.replace(/(\w+)\s*:/g, '"$1":');
+  jsonString = jsonString.replace(/:\s*'([^']*)'/g, ': "$1"');
+
+  return jsonString;
+}
+
   async parseVideoPage({ id, html }) {
 
   const videoIdMatch = id.match(/\d+/);
