@@ -102,44 +102,19 @@ class PorntrexProvider extends Provider {
 
   let playlistUrl = null;
 
-/* extract player config JSON */
-const playerMatch = embedHtml.match(/sources\s*:\s*(\[[^\]]+\])/i);
+const sourceMatch = embedHtml.match(/file\s*:\s*["']((?:https?:)?\/\/[^"']+\.m3u8[^"']*)["']/i);
 
-if (playerMatch) {
-  try {
-    const sources = JSON.parse(playerMatch[1].replace(/'/g, '"'));
+if (sourceMatch) {
 
-    if (sources && sources.length) {
-      let rawUrl = sources[0].file || sources[0].src;
+  let url = sourceMatch[1];
 
-      if (rawUrl) {
-        if (rawUrl.startsWith("//")) rawUrl = "https:" + rawUrl;
-
-        playlistUrl = this.cleanUrl(rawUrl);
-
-        logger.info("Porntrex playlist found: " + playlistUrl);
-      }
-    }
-  } catch (err) {
-    logger.warn("Porntrex: failed to parse sources JSON");
+  if (url.startsWith("//")) {
+    url = "https:" + url;
   }
-}
 
-/* fallback regex in case JSON format changes */
-if (!playlistUrl) {
-  const fallback = embedHtml.match(/["']((?:https?:)?\/\/[^"' ]+\.m3u8[^"' ]*)["']/i);
+  playlistUrl = this.cleanUrl(url);
 
-  if (fallback) {
-    let rawUrl = fallback[1];
-    if (rawUrl.startsWith("//")) rawUrl = "https:" + rawUrl;
-
-    playlistUrl = this.cleanUrl(rawUrl);
-    logger.info("Porntrex fallback playlist: " + playlistUrl);
-  }
-}
-
-if (!playlistUrl) {
-  logger.warn("Porntrex: no playlist found");
+  logger.info("Porntrex playlist found: " + playlistUrl);
 }
 
   const $ = load(html);
