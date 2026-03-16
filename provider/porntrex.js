@@ -120,6 +120,10 @@ async resolveStream(url) {
 
   async parseVideoPage({ id, html }) {
 
+  if (this.dataset[id]) {
+    return this.dataset[id];
+  }
+
 // Prevent re-parsing direct stream URLs
   if (id.includes("get_file")) {
     return { videoPageUrl: id };
@@ -173,7 +177,7 @@ if (!streams.length) {
   logger.warn("Porntrex: no quality streams found");
 }
 
-return {
+const result = {
   metaResponse: new meta.MetaResponse(
     id,
     "movie",
@@ -185,6 +189,10 @@ return {
   ),
   streams: streams.slice(0,3)
 };
+
+this.dataset[id] = result;
+
+return result;
 }
 
 }
