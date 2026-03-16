@@ -142,7 +142,6 @@ if (playlistMatch) {
   playlistUrl = this.cleanUrl(playlistUrl);
 
   logger.debug("Porntrex HLS detected: " + playlistUrl);
-}
 
   try {
 
