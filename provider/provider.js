@@ -218,12 +218,15 @@ async fetchJson(url) {
     const mp4 = html.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
     if (mp4) {
       return {
-        streams: [{
-          type: 'movie',
-          url: this.cleanUrl(mp4[0]),
-          name: 'HD'
-        }]
-      };
+  streams: [{
+    type: 'movie',
+    url: this.cleanUrl(mp4[0]),
+    name: 'MP4',
+    behaviorHints: {
+      notWebReady: false
+    }
+  }]
+};
     }
 
     const meta = await this.parseVideoPage({ id, html });
@@ -316,10 +319,13 @@ async fetchJson(url) {
       logger.debug({ streams }, 'streams', streams.length);
 
       return streams.map(stream => ({
-        type: 'movie',
-        url: stream.url,
-        name: stream.resolution
-      }));
+  type: 'movie',
+  url: stream.url,
+  name: stream.resolution,
+  behaviorHints: {
+    notWebReady: true
+  }
+}));
 
     } catch (e) {
 
