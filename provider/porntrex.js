@@ -232,17 +232,17 @@ if (!streams.length) {
     }
 
     return {
-      metaResponse: new meta.MetaResponse(
-        id,
-        "movie",
-        title,
-        {
-          description,
-          background: poster
-        }
-      ),
-      streams
-    };
+  metaResponse: new meta.MetaResponse(
+    id,
+    "movie",
+    title,
+    {
+      description,
+      background: poster
+    }
+  ),
+  videoPageUrl: streams.length ? streams[0].url : null
+};
   }
 
 }
