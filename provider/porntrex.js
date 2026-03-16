@@ -114,7 +114,9 @@ class PorntrexProvider extends Provider {
     const embedHtml = await this.fetchHtml(embedUrl);
 
     // Extract playlist URL
-const playlistMatch = embedHtml.match(/https?:\\?\/\\?\/[^"'<>]+\.m3u8[^"'<>]*/i);
+const playlistMatch =
+  embedHtml.match(/"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i) ||
+  embedHtml.match(/file\s*:\s*"(https?:\\\/\\\/[^"]+\.m3u8[^"]*)"/i);
 
 // Debug
 logger.debug({
@@ -126,14 +128,16 @@ let streams = [];
 
 if (playlistMatch) {
 
-  let playlistUrl = playlistMatch[0]
-  .replace(/\\\//g, "/"); // unescape urls
+  let playlistUrl = playlistMatch[1] || playlistMatch[0];
 
-  if (playlistUrl.startsWith("//")) {
-    playlistUrl = "https:" + playlistUrl;
-  }
+playlistUrl = playlistUrl
+  .replace(/\\\//g, "/")
+  .replace(/"/g, "")
+  .trim();
 
-  playlistUrl = this.cleanUrl(playlistUrl);
+playlistUrl = this.cleanUrl(playlistUrl);
+
+logger.debug("Porntrex playlist URL: " + playlistUrl);
 
   try {
 
@@ -241,7 +245,7 @@ if (!streams.length) {
       background: poster
     }
   ),
-  videoPageUrl: streams.length ? streams[0].url : null
+  videoPageUrl: playlistUrl
 };
   }
 
