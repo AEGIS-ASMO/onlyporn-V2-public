@@ -143,8 +143,6 @@ if (hashMatch) {
 
 if (mgfs && hash) {
 
-  const mgfs = mgfsMatch[1];
-
   const cdnMatch = thumb?.match(/\/\/(b\d+)\.trafficdeposit/);
   const cdn = cdnMatch ? cdnMatch[1] : 'b1';
 
