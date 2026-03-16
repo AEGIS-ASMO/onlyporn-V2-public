@@ -124,10 +124,21 @@ class PorntrexProvider extends Provider {
 
   let playlistUrl = null;
 
-  if (playlistMatch) {
-    playlistUrl = this.cleanUrl(playlistMatch[1]);
-    logger.debug("Porntrex HLS detected: " + playlistUrl);
+// first try absolute m3u8
+let playlistMatch = embedHtml.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/i);
+
+// if not found, check relative get_file path
+if (!playlistMatch) {
+  const relMatch = embedHtml.match(/\/get_file\/[^"' ]+\/playlist\.m3u8[^"' ]*/i);
+  if (relMatch) {
+    playlistMatch = [this.baseUrl.replace(/\/$/, '') + relMatch[0]];
   }
+}
+
+if (playlistMatch) {
+  playlistUrl = this.cleanUrl(playlistMatch[0]);
+  logger.info("Porntrex playlist found: " + playlistUrl);
+}
 
   const $ = load(html);
 
