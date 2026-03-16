@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const axios = require('axios');
 const { load } = require('cheerio');
 const logger = require('../logger');
 const { meta } = require('../model');
@@ -11,38 +12,6 @@ const sortByMappings = {
   'Views': 'views',
   'Orgasmic': 'orgasmic',
 };
-
-/* ---------------- HELPERS ---------------- */
-
-function digitSum(str) {
-  return String(str)
-    .replace(/\D/g, '')
-    .split('')
-    .reduce((a, b) => a + Number(b), 0);
-}
-
-function decryptSxyprnPath(path) {
-  try {
-
-    const parts = path.split('/');
-
-    if (parts.length < 8) return null;
-
-    const c = parseInt(parts[5]);
-    const a = digitSum(parts[6]);
-    const b = digitSum(parts[7]);
-
-    parts[5] = String(c - (a + b));
-
-    return 'https://www.sxyprn.com' + parts.join('/');
-
-  } catch (e) {
-    logger.error(e, 'Sxyprn decrypt failed');
-    return null;
-  }
-}
-
-/* ---------------- PROVIDER ---------------- */
 
 class SxyprnProvider extends Provider {
 
@@ -139,100 +108,88 @@ class SxyprnProvider extends Provider {
 
     const { id } = args;
 
-    const html = await this.fetchHtml(id);
-
-    return this.parseVideoPage({ id, html });
+    return this.fetchHtml(id)
+      .then(html => this.parseVideoPage({ id, html }));
   }
 
   parseVideoPage({ id, html }) {
 
-  const $ = load(html);
+    const $ = load(html);
 
-  const title =
-    $('meta[property="og:title"]').attr('content');
+    const title =
+      $('meta[property="og:title"]').attr('content');
 
-  const poster =
-    'https:' + $('meta[property="og:image"]').attr('content');
+    const poster =
+      'https:' + $('meta[property="og:image"]').attr('content');
 
-  const description =
-    $('meta[property="og:description"]').attr('content');
+    const description =
+      $('meta[property="og:description"]').attr('content');
 
-  let videoUrl = null;
+    let embedUrl = null;
 
-  /* -------- DIRECT VIDEO TAG -------- */
+    // look for iframe embeds
+    $('iframe').each((i, el) => {
+      const src = $(el).attr('src');
+      if (src && src.includes('luluvdo')) {
+        embedUrl = src;
+      }
+    });
 
-  const videoTag = $('video source').attr('src');
-
-  if (videoTag) {
-    videoUrl = videoTag.startsWith('http')
-      ? videoTag
-      : 'https:' + videoTag;
+    return new meta.MetaResponse(
+      id,
+      Provider.TYPE,
+      title,
+      {
+        description,
+        poster,
+        background: poster,
+        videoPageUrl: embedUrl || id,
+      },
+    );
   }
 
-  /* -------- SXyPRN CDN METHOD -------- */
+  /*
+  ----------------------------------------------------
+  LULUSTREAM RESOLVER
+  ----------------------------------------------------
+  */
 
-  if (!videoUrl) {
+  async resolveLuluStream(url) {
 
     try {
 
-      const parts = html.split("class='vidsnfo'");
+      logger.debug({ url }, 'Resolving LuluStream');
 
-      if (parts.length > 1) {
-
-        let buffer = parts[1].split("></span>");
-
-        let linkstream = buffer[0];
-
-        buffer = linkstream.split(":");
-
-        linkstream = buffer[1];
-
-        if (linkstream) {
-
-          const segments = linkstream.split('/');
-
-          if (segments.length >= 8) {
-
-            const digitSum = s =>
-              String(s)
-                .replace(/\D/g, '')
-                .split('')
-                .reduce((a, b) => a + Number(b), 0);
-
-            let c = parseInt(segments[5]);
-
-            const a = digitSum(segments[6]);
-            const b = digitSum(segments[7]);
-
-            segments[5] = String(c - (a + b));
-
-            videoUrl =
-              'https://www.sxyprn.com' + segments.join('/');
-
-          }
+      const res = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Referer': url
         }
+      });
+
+      const html = res.data;
+
+      const match = html.match(/file:"(https?:\/\/[^"]+\.m3u8[^"]*)"/);
+
+      if (match) {
+        return match[1];
       }
 
-    } catch (e) {
-      logger.error(e, 'Sxyprn decrypt error');
-    }
+      return null;
 
+    } catch (err) {
+
+      logger.error(err, 'LuluStream resolver failed');
+      return null;
+
+    }
   }
 
-  logger.debug({ videoUrl }, 'Sxyprn final video');
-
-  return new meta.MetaResponse(
-    id,
-    Provider.TYPE,
-    title,
-    {
-      description,
-      poster,
-      background: poster,
-      videoPageUrl: videoUrl,
-    },
-  );
-}
+  /*
+  ----------------------------------------------------
+  STREAM FETCHER
+  ----------------------------------------------------
+  */
 
   async getStreams(meta) {
 
@@ -240,12 +197,54 @@ class SxyprnProvider extends Provider {
       return { streams: [] };
     }
 
+    let streamUrl = null;
+
+    try {
+
+      const embedUrl = meta.videoPageUrl;
+
+      // resolve lulustream
+      if (embedUrl.includes('luluvdo') || embedUrl.includes('lulustream')) {
+
+        streamUrl = await this.resolveLuluStream(embedUrl);
+
+      }
+
+      // fallback direct mp4 detection
+      if (!streamUrl) {
+
+        const res = await axios.get(embedUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0'
+          }
+        });
+
+        const html = res.data;
+
+        const mp4 = html.match(/https?:\/\/[^"]+\.mp4/);
+
+        if (mp4) {
+          streamUrl = mp4[0];
+        }
+
+      }
+
+    } catch (err) {
+
+      logger.error(err, 'Stream resolver failed');
+
+    }
+
+    if (!streamUrl) {
+      return { streams: [] };
+    }
+
     return {
       streams: [
         {
           type: Provider.TYPE,
-          url: meta.videoPageUrl,
-          name: 'OnlyPorn HD',
+          url: streamUrl,
+          name: 'Sxyprn HD',
         },
       ],
     };
