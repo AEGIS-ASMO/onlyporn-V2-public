@@ -129,9 +129,9 @@ if (poster && poster.startsWith('//')) {
 
   let videoUrl = null;
 
-const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
+const mgfs = $('#player_el').attr('data-mgfs');
 
-const thumb = poster;
+const thumb = poster || '';
 
 let hash = null;
 
