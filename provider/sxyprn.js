@@ -1,6 +1,5 @@
 require('dotenv').config();
 
-const axios = require('axios');
 const { load } = require('cheerio');
 const logger = require('../logger');
 const { meta } = require('../model');
@@ -114,82 +113,41 @@ class SxyprnProvider extends Provider {
 
   parseVideoPage({ id, html }) {
 
-    const $ = load(html);
+  const $ = load(html);
 
-    const title =
-      $('meta[property="og:title"]').attr('content');
+  const title =
+    $('meta[property="og:title"]').attr('content');
 
-    const poster =
-      'https:' + $('meta[property="og:image"]').attr('content');
+  const poster =
+    'https:' + $('meta[property="og:image"]').attr('content');
 
-    const description =
-      $('meta[property="og:description"]').attr('content');
+  const description =
+    $('meta[property="og:description"]').attr('content');
 
-    let embedUrl = null;
+  // extract internal player id
+  const mgfs = $('#player_el').attr('data-mgfs');
 
-    // look for iframe embeds
-    $('iframe').each((i, el) => {
-      const src = $(el).attr('src');
-      if (src && src.includes('luluvdo')) {
-        embedUrl = src;
-      }
-    });
+  let videoUrl = null;
 
-    return new meta.MetaResponse(
-      id,
-      Provider.TYPE,
-      title,
-      {
-        description,
-        poster,
-        background: poster,
-        videoPageUrl: embedUrl || id,
-      },
-    );
+  if (mgfs) {
+
+    // internal video server
+    videoUrl = `https://b1.trafficdeposit.com/hls/${mgfs}/master.m3u8`;
+
   }
 
-  /*
-  ----------------------------------------------------
-  LULUSTREAM RESOLVER
-  ----------------------------------------------------
-  */
-
-  async resolveLuluStream(url) {
-
-    try {
-
-      logger.debug({ url }, 'Resolving LuluStream');
-
-      const res = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-          'Referer': url
-        }
-      });
-
-      const html = res.data;
-
-      const match = html.match(/file:"(https?:\/\/[^"]+\.m3u8[^"]*)"/);
-
-      if (match) {
-        return match[1];
-      }
-
-      return null;
-
-    } catch (err) {
-
-      logger.error(err, 'LuluStream resolver failed');
-      return null;
-
-    }
-  }
-
-  /*
-  ----------------------------------------------------
-  STREAM FETCHER
-  ----------------------------------------------------
-  */
+  return new meta.MetaResponse(
+    id,
+    Provider.TYPE,
+    title,
+    {
+      description,
+      poster,
+      background: poster,
+      videoPageUrl: videoUrl,
+    },
+  );
+}
 
   async getStreams(meta) {
 
@@ -197,54 +155,12 @@ class SxyprnProvider extends Provider {
       return { streams: [] };
     }
 
-    let streamUrl = null;
-
-    try {
-
-      const embedUrl = meta.videoPageUrl;
-
-      // resolve lulustream
-      if (embedUrl.includes('luluvdo') || embedUrl.includes('lulustream')) {
-
-        streamUrl = await this.resolveLuluStream(embedUrl);
-
-      }
-
-      // fallback direct mp4 detection
-      if (!streamUrl) {
-
-        const res = await axios.get(embedUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0'
-          }
-        });
-
-        const html = res.data;
-
-        const mp4 = html.match(/https?:\/\/[^"]+\.mp4/);
-
-        if (mp4) {
-          streamUrl = mp4[0];
-        }
-
-      }
-
-    } catch (err) {
-
-      logger.error(err, 'Stream resolver failed');
-
-    }
-
-    if (!streamUrl) {
-      return { streams: [] };
-    }
-
     return {
       streams: [
         {
           type: Provider.TYPE,
-          url: streamUrl,
-          name: 'Sxyprn HD',
+          url: meta.videoPageUrl,
+          name: 'OnlyPorn HD',
         },
       ],
     };
