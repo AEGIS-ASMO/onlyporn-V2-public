@@ -113,19 +113,21 @@ class PorntrexProvider extends Provider {
 
     const embedHtml = await this.fetchHtml(embedUrl);
 
-    // FIX 4 — Debug embed preview
-    logger.debug({
-      embedPreview: embedHtml.substring(0, 400)
-    }, "Porntrex embed preview");
-
     // Extract playlist URL
-const playlistMatch = embedHtml.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
+const playlistMatch = embedHtml.match(/https?:\\?\/\\?\/[^"'<>]+\.m3u8[^"'<>]*/i);
+
+// Debug
+logger.debug({
+  embedPreview: embedHtml.substring(0, 400),
+  foundM3U8: playlistMatch?.[0]
+}, "Porntrex embed preview");
 
 let streams = [];
 
 if (playlistMatch) {
 
-  let playlistUrl = playlistMatch[0];
+  let playlistUrl = playlistMatch[0]
+  .replace(/\\\//g, "/"); // unescape urls
 
   if (playlistUrl.startsWith("//")) {
     playlistUrl = "https:" + playlistUrl;
@@ -139,46 +141,66 @@ if (playlistMatch) {
 
     const lines = playlist.split("\n");
 
-    for (let i = 0; i < lines.length; i++) {
+let foundVariants = false;
 
-      if (lines[i].includes("RESOLUTION=")) {
+for (let i = 0; i < lines.length; i++) {
 
-        const resolutionMatch = lines[i].match(/RESOLUTION=\d+x(\d+)/);
+  if (lines[i].includes("#EXT-X-STREAM-INF")) {
 
-        const quality = resolutionMatch
-          ? resolutionMatch[1] + "p"
-          : "HD";
+    foundVariants = true;
 
-        const streamPath = lines[i + 1]?.trim();
+    const resolutionMatch = lines[i].match(/RESOLUTION=\d+x(\d+)/);
 
-        if (!streamPath) continue;
+    const quality = resolutionMatch
+      ? resolutionMatch[1] + "p"
+      : "HD";
 
-        let streamUrl;
+    const streamPath = lines[i + 1]?.trim();
 
-        if (streamPath.startsWith("http")) {
-          streamUrl = streamPath;
-        } else {
-          const base = playlistUrl.substring(0, playlistUrl.lastIndexOf("/") + 1);
-          streamUrl = base + streamPath;
-        }
+    if (!streamPath) continue;
 
-        streams.push({
-          name: "Porntrex",
-          title: quality,
-          url: streamUrl,
-          behaviorHints: { notWebReady: true }
-        });
+    let streamUrl;
 
-      }
-
+    if (streamPath.startsWith("http")) {
+      streamUrl = streamPath;
+    } else {
+      const base = playlistUrl.substring(0, playlistUrl.lastIndexOf("/") + 1);
+      streamUrl = base + streamPath;
     }
 
-  } catch (e) {
-    logger.warn("Porntrex playlist parse failed", e);
+    streams.push({
+      name: "Porntrex",
+      title: quality,
+      url: streamUrl,
+      behaviorHints: { notWebReady: true }
+    });
+
   }
 
 }
-  // fallback MP4 detection
+
+// if playlist had no variants, use the playlist itself
+if (!foundVariants) {
+  streams.push({
+    name: "Porntrex",
+    title: "Auto",
+    url: playlistUrl,
+    behaviorHints: { notWebReady: true }
+  });
+}
+
+} catch (e) {
+    logger.warn("Porntrex playlist parse failed", e);
+  }
+}
+
+streams.sort((a, b) => {
+  const qa = parseInt(a.title.replace("p","")) || 0;
+  const qb = parseInt(b.title.replace("p","")) || 0;
+  return qb - qa;
+});
+
+// fallback MP4 detection
 if (!streams.length) {
 
   const fallback = embedHtml.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
@@ -192,7 +214,6 @@ if (!streams.length) {
   }
 
 }
-
     const $ = load(html);
 
     const title =
