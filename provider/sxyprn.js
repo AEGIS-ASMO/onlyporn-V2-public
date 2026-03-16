@@ -178,5 +178,6 @@ if (mgfsMatch) {
     ]
   };
 }
+}
 
 module.exports = SxyprnProvider.create;
