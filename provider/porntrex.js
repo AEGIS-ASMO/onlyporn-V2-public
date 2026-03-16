@@ -201,7 +201,6 @@ if (!foundVariants) {
 } catch (e) {
     logger.warn("Porntrex playlist parse failed", e);
   }
-}
 
 streams.sort((a, b) => {
   const qa = parseInt(a.title.replace("p","")) || 0;
