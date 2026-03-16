@@ -178,22 +178,20 @@ if (playlistMatch) {
   }
 
 }
-  // fallback to best MP4
-  urls.sort((a, b) => {
-    const qa = parseInt(a.match(/(\d{3,4})p/)?.[1] || 0);
-    const qb = parseInt(b.match(/(\d{3,4})p/)?.[1] || 0);
-    return qb - qa;
-  });
+  // fallback MP4 detection
+if (!streams.length) {
 
-  videoPageUrl = urls[0];
+  const fallback = embedHtml.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
+
+  if (fallback) {
+    streams.push({
+      name: "Porntrex",
+      title: "HD",
+      url: this.cleanUrl(fallback[0])
+    });
+  }
+
 }
-
-      if (videoPageUrl.startsWith("//")) {
-        videoPageUrl = "https:" + videoPageUrl;
-      }
-
-      videoPageUrl = this.cleanUrl(videoPageUrl);
-    }
 
     const $ = load(html);
 
