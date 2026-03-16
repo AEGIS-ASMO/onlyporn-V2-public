@@ -86,57 +86,43 @@ class PorntrexProvider extends Provider {
   return metas;
 }
 
-  fixLooseJson(looseJsonString) {
-
-    let jsonString = looseJsonString
-      .trim()
-      .replace(/^"(.*)"$/, '$1');
-
-    jsonString = jsonString.replace(/'/g, '"');
-    jsonString = jsonString.replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":');
-    jsonString = jsonString.replace(/:\s*'([^']*)'/g, ': "$1"');
-
-    return jsonString;
-  }
-
   async parseVideoPage({ id, html }) {
 
-  const videoIdMatch = id.match(/video\/(\d+)/i);
+  const videoIdMatch = id.match(/\d+/);
 
   if (!videoIdMatch) {
     logger.warn("Porntrex: invalid video id");
     return null;
   }
 
-  const videoId = videoIdMatch[1];
+  const videoId = videoIdMatch[0];
   const embedUrl = `${this.baseUrl}embed/${videoId}`;
 
   const embedHtml = await this.fetchHtml(embedUrl);
 
-  // Extract m3u8 playlist
-  const playlistMatch =
-    embedHtml.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/i);
-
-  logger.debug({
-    embedPreview: embedHtml.substring(0, 400),
-    foundM3U8: playlistMatch?.[0]
-  }, "Porntrex embed preview");
-
   let playlistUrl = null;
 
 // first try absolute m3u8
-let playlistMatch = embedHtml.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/i);
+let playlistMatch =
+  embedHtml.match(/(?:file|src)\s*[:=]\s*["'](https?:\/\/[^"']+\.m3u8[^"']*)/i)
+  || embedHtml.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/i);
 
 // if not found, check relative get_file path
 if (!playlistMatch) {
   const relMatch = embedHtml.match(/\/get_file\/[^"' ]+\/playlist\.m3u8[^"' ]*/i);
   if (relMatch) {
-    playlistMatch = [this.baseUrl.replace(/\/$/, '') + relMatch[0]];
+    playlistMatch = ['https://porntrex.com' + relMatch[0]];
   }
 }
 
+logger.debug({
+  embedPreview: embedHtml.substring(0, 400),
+  foundM3U8: playlistMatch?.[0]
+}, "Porntrex embed preview");
+
 if (playlistMatch) {
-  playlistUrl = this.cleanUrl(playlistMatch[0]);
+  const rawUrl = playlistMatch[1] ? playlistMatch[1] : playlistMatch[0];
+playlistUrl = this.cleanUrl(rawUrl);
   logger.info("Porntrex playlist found: " + playlistUrl);
 }
 
@@ -157,17 +143,17 @@ if (playlistMatch) {
   }
 
   return {
-    metaResponse: new meta.MetaResponse(
-      id,
-      "movie",
-      title,
-      {
-        description,
-        background: poster
-      }
-    ),
-    videoPageUrl: playlistUrl
-  };
+  metaResponse: new meta.MetaResponse(
+    id,
+    "movie",
+    title,
+    {
+      description,
+      background: poster
+    }
+  ),
+  videoPageUrl: playlistUrl
+};
 }
 
 }
