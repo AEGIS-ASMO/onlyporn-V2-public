@@ -136,22 +136,7 @@ async resolveStream(url) {
 const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
 const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
 
-  const match = embedHtml.match(/video_url:\s*'([^']+)'/);
-
-  if (!match) {
-    logger.error("Porntrex: video_url not found");
-    return null;
-  }
-
-  let videoUrl = match[1];
-
-  if (videoUrl.startsWith("//")) {
-    videoUrl = "https:" + videoUrl;
-  }
-
-  const $ = load(html);
-
-  const title = titleMatch ? titleMatch[1] : "Porntrex Video";
+const title = titleMatch ? titleMatch[1] : "Porntrex Video";
 
 let poster = previewMatch ? previewMatch[1] : null;
 
@@ -159,7 +144,33 @@ if (poster && poster.startsWith("//")) {
   poster = "https:" + poster;
 }
 
-  const finalStream = await this.resolveStream(videoUrl);
+const streams = [];
+
+const qualityRegex =
+  /(video(?:_alt_url\d*|_url)):\s*'([^']+)'[\s\S]*?\1_text:\s*'([^']+)'/g;
+
+let qmatch;
+
+while ((qmatch = qualityRegex.exec(embedHtml)) !== null) {
+  let url = qmatch[2];
+  const quality = qmatch[3];
+
+  if (url.startsWith("//")) {
+    url = "https:" + url;
+  }
+
+  const finalUrl = await this.resolveStream(url);
+
+  streams.push({
+    url: finalUrl,
+    name: `Porntrex ${quality}`,
+    type: "mp4"
+  });
+}
+
+if (!streams.length) {
+  logger.warn("Porntrex: no quality streams found");
+}
 
 return {
   metaResponse: new meta.MetaResponse(
@@ -171,7 +182,7 @@ return {
       background: poster
     }
   ),
-  videoPageUrl: finalStream
+  streams: streams.slice(0,3)
 };
 }
 
