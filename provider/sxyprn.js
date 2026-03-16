@@ -126,21 +126,19 @@ class SxyprnProvider extends Provider {
 
   let videoUrl = null;
 
-  // safer extraction from raw HTML
-  const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
+const mgfsMatch = html.match(/data-mgfs=['"](\d+)['"]/);
 
-  if (mgfsMatch) {
+if (mgfsMatch) {
 
-    const mgfs = mgfsMatch[1];
+  const mgfs = mgfsMatch[1];
 
-    // rotate CDN server
-    const cdn = Math.floor(Math.random() * 3) + 1;
+  const cdn = Math.floor(Math.random() * 4) + 1;
 
-    videoUrl =
-      `https://b${cdn}.trafficdeposit.com/hls/${mgfs}/master.m3u8`;
+  videoUrl =
+    `https://b${cdn}.trafficdeposit.com/hls/${mgfs}/master.m3u8`;
 
-    logger.debug({ mgfs, videoUrl }, 'Sxyprn stream found');
-  }
+  logger.debug({ mgfs, videoUrl }, "Sxyprn extracted stream");
+}
 
   return new meta.MetaResponse(
     id,
@@ -157,20 +155,28 @@ class SxyprnProvider extends Provider {
 
   async getStreams(meta) {
 
-    if (!meta.videoPageUrl) {
-      return { streams: [] };
-    }
-
-    return {
-      streams: [
-        {
-          type: Provider.TYPE,
-          url: meta.videoPageUrl,
-          name: 'OnlyPorn HD',
-        },
-      ],
-    };
+  if (!meta.videoPageUrl) {
+    return { streams: [] };
   }
+
+  return {
+    streams: [
+      {
+        name: "OnlyPorn HD",
+        title: "SxyPrn",
+        url: meta.videoPageUrl,
+        behaviorHints: {
+          notWebReady: false,
+          proxyHeaders: {
+            request: {
+              Referer: "https://www.sxyprn.com/",
+              Origin: "https://www.sxyprn.com"
+            }
+          }
+        }
+      }
+    ]
+  };
 }
 
 module.exports = SxyprnProvider.create;
