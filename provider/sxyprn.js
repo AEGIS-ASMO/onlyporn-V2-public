@@ -6,10 +6,6 @@ const { meta } = require('../model');
 const Provider = require('./provider');
 
 const axios = require('axios');
-const cloudscraper = require('cloudscraper');
-const { CookieJar } = require('tough-cookie');
-
-const jar = new CookieJar();
 
 const DEFAULT_HEADERS = {
   'User-Agent':
@@ -40,21 +36,24 @@ class SxyprnProvider extends Provider {
   
 
 async safeFetch(url, extraHeaders = {}) {
-  try {
-    const res = await cloudscraper.get({
-      url,
-      headers: {
-        ...DEFAULT_HEADERS,
-        ...extraHeaders,
-      },
-      jar,
-    });
+    try {
+        const res = await axios.get(url, {
+              headers: {
+                      ...DEFAULT_HEADERS,
+                              ...extraHeaders,
+                                      Referer: this.baseUrl,
+                                              Origin: this.baseUrl,
+                                                    },
+                                                          timeout: 15000,
+                                                                validateStatus: () => true,
+                                                                    });
 
-    return res; // already HTML
-  } catch (err) {
-    logger.error({ url, err }, 'safeFetch failed (cloudflare)');
-    return null;
-  }
+                                                                        return res.data;
+                                                                          } catch (err) {
+                                                                              logger.error({ url, err }, 'safeFetch failed');
+                                                                                  return null;
+                                                                                    }
+                                                                                    }
 }
 
   // ----------------------------------
