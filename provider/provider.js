@@ -141,8 +141,21 @@ async fetchJson(url) {
       }
 
       if (args.extra.skip) {
-        url += this.handlePagination(url, args);
-      }
+  const paginated = this.handlePagination(url, args);
+
+  if (paginated.startsWith('http')) {
+    // ✅ full URL (like xhamster)
+    url = paginated;
+  } else {
+    // ✅ relative (like ?page=2)
+    url += paginated;
+  }
+}
+
+if (url.match(/https?:\/\/.*https?:\/\//)) {
+  logger.error("❌ Broken URL detected:", url);
+  return { metas: [] };
+}
 
       const html = await this.fetchHtml(url).catch(() => '');
       const metas = this.getCatalogMetas(html);
