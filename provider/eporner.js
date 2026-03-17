@@ -27,7 +27,7 @@ class EpornerProvider extends Provider {
   }
 
   handleSearch({ extra: { search: keyword } }) {
-    return `${this.baseUrl}/search/${keyword}/`;
+    return `${this.baseUrl}/search/${encodeURIComponent(keyword)}/`;
   }
 
   handleGenre({ id, extra: { genre } }) {
