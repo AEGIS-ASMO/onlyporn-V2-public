@@ -26,42 +26,39 @@ class MissavProvider extends Provider {
   }
 
 async fetchHtml(url) {
- console.log('MISSAV fetchHtml:', url);
+  console.log('MISSAV fetchHtml:', url);
+
   try {
-
-    await client.get(this.baseUrl, {
-      timeout: 10000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-      }
-    });
-
     const res = await client.get(url, {
       timeout: 10000,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'text/html,application/xhtml+xml',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://missav.ws/',
+        'Referer': this.baseUrl + '/',
       },
       validateStatus: () => true,
     });
 
+    if (res.status === 403) {
+      throw new Error('Cloudflare 403');
+    }
+
     const html = res.data;
 
-    // 🔥 Detect Cloudflare block page
     if (
       html.includes('Just a moment') ||
       html.includes('cf-browser-verification')
     ) {
-      throw new Error('Cloudflare blocked');
+      throw new Error('Cloudflare challenge page');
     }
 
     return html;
 
   } catch (e) {
-  console.error('MISSAV FULL ERROR:', e); // 🔥 full error
-  throw e; // 🔥 DO NOT swallow
-}
+    console.error('MISSAV ERROR:', e.message);
+    throw e;
+  }
 }
 
   async getCatalog({ id, extra }) {
