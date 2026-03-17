@@ -54,7 +54,6 @@ async safeFetch(url, extraHeaders = {}) {
     return null;
   }
 }
-}
 
   // ----------------------------------
   // Extract HLS from JWPlayer script
