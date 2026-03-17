@@ -5,6 +5,14 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
+const axios = require('axios');
+
+const DEFAULT_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
 const sortByMappings = {
   'Latest': 'latest',
   'Trending': 'trending',
@@ -22,38 +30,102 @@ class SxyprnProvider extends Provider {
     return new SxyprnProvider();
   }
 
-  getInitialUrl() {
-    return this.baseUrl;
+  // ----------------------------------
+  // Utility: Safe HTTP fetch (Cloudflare-safe)
+  // ----------------------------------
+  async safeFetch(url, extraHeaders = {}) {
+    try {
+      const res = await axios.get(url, {
+        headers: {
+          ...DEFAULT_HEADERS,
+          ...extraHeaders,
+        },
+        timeout: 15000,
+        validateStatus: () => true,
+      });
+
+      return res.data;
+    } catch (err) {
+      logger.error({ url, err }, 'safeFetch failed');
+      return null;
+    }
   }
 
-  handleSearch({ extra: { search: keyword } }) {
-    return `${this.baseUrl}/${encodeURIComponent(keyword)}.html`;
+  // ----------------------------------
+  // Extract HLS from JWPlayer script
+  // ----------------------------------
+  extractJWPlayer(html) {
+    const $ = load(html);
+
+    const script = $('script')
+      .filter((_, el) => $(el).html()?.includes('jwplayer'))
+      .first()
+      .html();
+
+    if (!script) return null;
+
+    const match = script.match(/file:\s*"(https?:\/\/[^"]+\.m3u8[^"]*)"/);
+
+    return match ? match[1] : null;
   }
 
-  handleGenre({ extra: { genre } }) {
+  // ----------------------------------
+  // Extract iframe src
+  // ----------------------------------
+  extractIframe(html) {
+    const $ = load(html);
+    return $('iframe').attr('src') || null;
+  }
 
-    if (genre.includes('/cat')) {
-      return `${this.baseUrl}${genre}`;
+  // ----------------------------------
+  // Resolve external hosts (EXTENSIBLE)
+  // ----------------------------------
+  async resolveExternal(url) {
+
+    try {
+
+      // ---- LULUSTREAM / LULUVDO ----
+      if (url.includes('luluvdo') || url.includes('lulustream')) {
+
+        const html = await this.safeFetch(url);
+
+        if (!html) return null;
+
+        // Try JWPlayer
+        const stream = this.extractJWPlayer(html);
+        if (stream) return stream;
+
+        // Try deeper iframe
+        const iframe = this.extractIframe(html);
+        if (iframe && iframe !== url) {
+          return await this.resolveExternal(iframe);
+        }
+      }
+
+      // ---- MIXDROP (future ready) ----
+      if (url.includes('mixdrop')) {
+        const html = await this.safeFetch(url);
+        const match = html?.match(/MDCore\.wurl="([^"]+)"/);
+        if (match) return match[1];
+      }
+
+      // ---- STREAMTAPE (future ready) ----
+      if (url.includes('streamtape')) {
+        const html = await this.safeFetch(url);
+        const match = html?.match(/robotlink'\)\.innerHTML = '(.*?)'/);
+        if (match) return `https:${match[1]}`;
+      }
+
+    } catch (err) {
+      logger.error({ url, err }, 'resolveExternal failed');
     }
 
-    let [category, sortBy] = genre.split('(');
-
-    category = category.trim().replace(/\s+/g, '-');
-
-    sortBy = sortByMappings[(sortBy || '').replace(')', '')] || 'latest';
-
-    return `${this.baseUrl}/${category}.html?sm=${sortBy}`;
+    return null;
   }
 
-  handlePagination(url, { extra: { skip } }) {
-
-    const page = this.page(skip);
-
-    return url.includes('?')
-      ? `${url}&page=${page}`
-      : `${url}?page=${page}`;
-  }
-
+  // ----------------------------------
+  // Catalog
+  // ----------------------------------
   getCatalogMetas(html) {
 
     const metadataList = [];
@@ -67,14 +139,12 @@ class SxyprnProvider extends Provider {
         $e.find('.post_text').text().trim() ||
         $e.find('img').attr('alt');
 
-      const img = $e.find('img').first();
-
       let poster =
-        img.attr('data-src') ||
-        img.attr('data-original') ||
-        img.attr('src');
+        $e.find('img').attr('data-src') ||
+        $e.find('img').attr('data-original') ||
+        $e.find('img').attr('src');
 
-      if (poster && poster.startsWith('//')) {
+      if (poster && !poster.startsWith('http')) {
         poster = 'https:' + poster;
       }
 
@@ -102,121 +172,73 @@ class SxyprnProvider extends Provider {
     return metadataList;
   }
 
-  async getMetadata(args) {
+  // ----------------------------------
+  // Metadata
+  // ----------------------------------
+  async getMetadata({ id }) {
 
-    logger.debug({ args }, 'getMetadata');
+    logger.debug({ id }, 'getMetadata');
 
-    const { id } = args;
+    const html = await this.safeFetch(id);
+    if (!html) return null;
 
-    return this.fetchHtml(id)
-      .then(html => this.parseVideoPage({ id, html }));
+    return this.parseVideoPage({ id, html });
   }
 
-  parseVideoPage({ id, html }) {
+  // ----------------------------------
+  // MAIN PARSER
+  // ----------------------------------
+  async parseVideoPage({ id, html }) {
 
     const $ = load(html);
 
-    const title =
-      $('meta[property="og:title"]').attr('content');
+    const title = $('meta[property="og:title"]').attr('content');
 
-    let poster =
-      $('meta[property="og:image"]').attr('content');
+    let poster = $('meta[property="og:image"]').attr('content');
+    if (poster?.startsWith('//')) poster = 'https:' + poster;
 
-    if (poster && poster.startsWith('//')) {
-      poster = 'https:' + poster;
-    }
-
-    const description =
-      $('meta[property="og:description"]').attr('content');
+    const description = $('meta[property="og:description"]').attr('content');
 
     let videoUrl = null;
 
     // -----------------------------
-    // 1. Direct <video> tag
+    // 1. trafficdeposit
     // -----------------------------
-    const videoTag = $('video source').attr('src');
+    const mgfs = $('#player_el').attr('data-mgfs');
+    const thumb = poster || '';
 
-    if (videoTag) {
-      videoUrl = videoTag.startsWith('http')
-        ? videoTag
-        : 'https:' + videoTag;
+    const hashMatch = thumb.match(/\/img\/([^/]+)\//);
+    const hash = hashMatch ? hashMatch[1] : null;
+
+    if (mgfs && hash) {
+      const cdnMatch = thumb.match(/\/\/(b\d+)\.trafficdeposit/);
+      const cdn = cdnMatch ? cdnMatch[1] : 'b1';
+
+      videoUrl = `https://${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
     }
 
     // -----------------------------
-    // 2. trafficdeposit (primary)
+    // 2. JWPlayer direct
     // -----------------------------
     if (!videoUrl) {
-      const mgfs = $('#player_el').attr('data-mgfs');
-      const thumb = poster || '';
+      videoUrl = this.extractJWPlayer(html);
+    }
 
-      const hashMatch = thumb.match(/\/img\/([^/]+)\//);
-      const hash = hashMatch ? hashMatch[1] : null;
+    // -----------------------------
+    // 3. iframe → external resolve
+    // -----------------------------
+    if (!videoUrl) {
+      const iframe = this.extractIframe(html);
 
-      if (mgfs && hash) {
-        const cdnMatch = thumb.match(/\/\/(b\d+)\.trafficdeposit/);
-        const cdn = cdnMatch ? cdnMatch[1] : 'b1';
-
-        videoUrl = `https://${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
-
-        logger.debug({ hash, mgfs, videoUrl }, "trafficdeposit stream");
+      if (iframe) {
+        videoUrl = await this.resolveExternal(iframe);
       }
     }
 
     // -----------------------------
-    // 3. JWPlayer (LuluStream)
+    // Normalize
     // -----------------------------
-    if (!videoUrl) {
-      const script = $('script')
-        .filter((_, el) => $(el).html()?.includes('jwplayer'))
-        .first()
-        .html();
-
-      if (script) {
-        const match = script.match(/file:\s*"(https?:\/\/[^"]+\.m3u8[^"]*)"/);
-
-        if (match) {
-          videoUrl = match[1];
-          logger.debug({ videoUrl }, "JWPlayer stream");
-        }
-      }
-    }
-
-    // -----------------------------
-    // 4. Generic MP4 fallback
-    // -----------------------------
-    if (!videoUrl) {
-      const scripts = $('script')
-        .map((_, el) => $(el).html())
-        .get()
-        .join('\n');
-
-      const match = scripts.match(/(https?:\/\/[^"]+\.mp4)/);
-
-      if (match) {
-        videoUrl = match[1];
-        logger.debug({ videoUrl }, "MP4 fallback");
-      }
-    }
-
-    // -----------------------------
-    // 5. iframe fallback
-    // -----------------------------
-    if (!videoUrl) {
-      const iframeSrc = $('iframe').attr('src');
-
-      if (iframeSrc) {
-        videoUrl = iframeSrc.startsWith('http')
-          ? iframeSrc
-          : 'https:' + iframeSrc;
-
-        logger.debug({ videoUrl }, "iframe fallback");
-      }
-    }
-
-    // -----------------------------
-    // Normalize URL
-    // -----------------------------
-    if (videoUrl && videoUrl.startsWith('//')) {
+    if (videoUrl?.startsWith('//')) {
       videoUrl = 'https:' + videoUrl;
     }
 
@@ -233,6 +255,9 @@ class SxyprnProvider extends Provider {
     );
   }
 
+  // ----------------------------------
+  // Streams (TOKEN + HEADERS SAFE)
+  // ----------------------------------
   async getStreams(meta) {
 
     if (!meta.videoPageUrl) {
@@ -242,15 +267,18 @@ class SxyprnProvider extends Provider {
     return {
       streams: [
         {
-          name: "OnlyPorn HD",
-          title: "SxyPrn",
+          name: "OnlyPorn Auto",
+          title: "Universal Stream",
           url: meta.videoPageUrl,
+
           behaviorHints: {
             notWebReady: false,
+
             proxyHeaders: {
               request: {
-                Referer: "https://www.sxyprn.com/",
-                Origin: "https://www.sxyprn.com"
+                Referer: this.baseUrl,
+                Origin: this.baseUrl,
+                'User-Agent': DEFAULT_HEADERS['User-Agent'],
               }
             }
           }
