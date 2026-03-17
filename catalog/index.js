@@ -4,7 +4,6 @@ const { spankbangCatalogs } = require('./spankbang');
 const xhamsterCatalogs = require('./xhamster');
 const { catalogs: epornerCatalogs } = require('./eporner');
 const xvideosCatalog = require('./xvideos.json');
-const { catalogs: sxyprnCatalogs } = require('./sxyprn');
 
 function randomize(catalogs) {
   const arr = catalogs.map((_e, i) => i);
@@ -17,7 +16,6 @@ const catalogNames = [
   'eporner',
   'porntrex',
   'xvideos',
-  'sxyprn'
 ];
 
 const catalogs = [
@@ -25,7 +23,6 @@ const catalogs = [
   ...xhamsterCatalogs,
   ...porntrexCatalogs,
   ...spankbangCatalogs,
-  ...sxyprnCatalogs,
   xvideosCatalog
 ];
 
