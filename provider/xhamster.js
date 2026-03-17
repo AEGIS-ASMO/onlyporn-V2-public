@@ -49,11 +49,25 @@ class XhamsterProvider extends Provider {
   }
 
   handlePagination(url, { extra: { skip } }) {
+  const page = this.page(skip);
 
-    const page = this.page(skip);
+  try {
+    const u = new URL(url);
 
+    // remove trailing slash
+    let pathname = u.pathname.replace(/\/$/, '');
+
+    // remove existing page if already present
+    pathname = pathname.replace(/\/\d+$/, '');
+
+    u.pathname = `${pathname}/${page}/`;
+
+    return u.toString();
+  } catch (e) {
+    // fallback (should rarely happen)
     return `${url.replace(/\/$/, '')}/${page}/`;
   }
+}
 
   getCatalogMetas(html) {
 
@@ -70,15 +84,20 @@ class XhamsterProvider extends Provider {
       const $img = $a.find('img').first();
 
       const poster =
-        $img.attr('data-src') ||
-        $img.attr('src') ||
-        $img.attr('data-preview');
+  $img.attr('data-src') ||
+  $img.attr('data-srcset')?.split(',')[0]?.split(' ')[0] ||
+  $img.attr('src') ||
+  $img.attr('data-preview');
 
       const title =
         $img.attr('alt') ||
         $a.attr('title');
 
-      const videoPageUrl = $a.attr('href');
+      let videoPageUrl = $a.attr('href');
+
+if (videoPageUrl && !videoPageUrl.startsWith('http')) {
+  videoPageUrl = this.baseUrl + videoPageUrl;
+}
 
       if (!videoPageUrl) return;
 
