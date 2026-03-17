@@ -6,11 +6,20 @@ const { meta } = require('../model');
 const Provider = require('./provider');
 
 const axios = require('axios');
+const { wrapper } = require('axios-cookiejar-support');
+const { CookieJar } = require('tough-cookie');
+
+const jar = new CookieJar();
+const client = wrapper(axios.create({ jar }));
 
 const DEFAULT_HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+  'Accept':
+    'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
+  'Connection': 'keep-alive',
+  'Upgrade-Insecure-Requests': '1',
 };
 
 const sortByMappings = {
@@ -37,7 +46,7 @@ class SxyprnProvider extends Provider {
 
 async safeFetch(url, extraHeaders = {}) {
   try {
-    const res = await axios.get(url, {
+    const res = await client.get(url, {
       headers: {
         ...DEFAULT_HEADERS,
         ...extraHeaders,
@@ -47,6 +56,12 @@ async safeFetch(url, extraHeaders = {}) {
       timeout: 15000,
       validateStatus: () => true,
     });
+
+if (typeof res.data === 'string') {
+      if (res.data.includes('cf-browser-verification') || res.data.includes('Just a moment')) {
+        logger.error("🚫 CLOUDFLARE BLOCKED PAGE");
+      }
+    }
 
     return res.data;
   } catch (err) {
@@ -59,27 +74,61 @@ async safeFetch(url, extraHeaders = {}) {
   // Extract HLS from JWPlayer script
   // ----------------------------------
   extractJWPlayer(html) {
-    const $ = load(html);
+  const $ = load(html);
 
-    const script = $('script')
-      .filter((_, el) => $(el).html()?.includes('jwplayer'))
-      .first()
-      .html();
+  const scripts = $('script')
+    .map((_, el) => $(el).html())
+    .get()
+    .join('\n');
 
-    if (!script) return null;
+  if (!scripts) return null;
 
-    const match = script.match(/file:\s*"(https?:\/\/[^"]+\.m3u8[^"]*)"/);
+  // 🔥 Case 1: sources array
+  let match = scripts.match(/sources:\s*\[\s*{[^}]*file:\s*"(https?:\/\/[^"]+)"/);
+  if (match) return match[1];
 
-    return match ? match[1] : null;
+  // 🔥 Case 2: direct file
+  match = scripts.match(/file:\s*"(https?:\/\/[^"]+)"/);
+  if (match) return match[1];
+
+  // 🔥 Case 3: video_url pattern
+match = scripts.match(/video_url:\s*"(https?:\/\/[^"]+)"/);
+if (match) return match[1];
+
+  return null;
+}
+
+extractHTMLVideo(html) {
+  const $ = load(html);
+
+  let src =
+    $('video').attr('src') ||
+    $('video source').attr('src');
+
+  if (src && src.startsWith('//')) {
+    src = 'https:' + src;
   }
 
-  // ----------------------------------
-  // Extract iframe src
-  // ----------------------------------
-  extractIframe(html) {
-    const $ = load(html);
-    return $('iframe').attr('src') || null;
+  return src || null;
+}
+
+extractIframe(html) {
+  const $ = load(html);
+  let src = $('iframe').attr('src');
+
+  if (!src) return null;
+
+  if (src.startsWith('//')) {
+    src = 'https:' + src;
   }
+
+  // ✅ NEW: handle relative paths
+  if (src.startsWith('/')) {
+    src = this.baseUrl + src;
+  }
+
+  return src;
+}
 
   // ----------------------------------
   // Resolve external hosts (EXTENSIBLE)
@@ -224,12 +273,15 @@ async safeFetch(url, extraHeaders = {}) {
       videoUrl = `https://${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
     }
 
-    // -----------------------------
-    // 2. JWPlayer direct
-    // -----------------------------
-    if (!videoUrl) {
-      videoUrl = this.extractJWPlayer(html);
-    }
+    // 2. JWPlayer
+if (!videoUrl) {
+  videoUrl = this.extractJWPlayer(html);
+}
+
+// 🔥 3. HTML5 video fallback (NEW)
+if (!videoUrl) {
+  videoUrl = this.extractHTMLVideo(html);
+}
 
     // -----------------------------
     // 3. iframe → external resolve
@@ -250,6 +302,11 @@ async safeFetch(url, extraHeaders = {}) {
     }
 
 logger.info({ videoUrl }, "EXTRACTED URL");
+logger.info({
+  jw: !!this.extractJWPlayer(html),
+  html5: !!this.extractHTMLVideo(html),
+  iframe: !!this.extractIframe(html),
+}, "PARSER STATUS");
 
     return new meta.MetaResponse(
       id,
