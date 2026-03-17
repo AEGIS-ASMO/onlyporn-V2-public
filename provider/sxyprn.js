@@ -6,6 +6,10 @@ const { meta } = require('../model');
 const Provider = require('./provider');
 
 const axios = require('axios');
+const cloudscraper = require('cloudscraper');
+const { CookieJar } = require('tough-cookie');
+
+const jar = new CookieJar();
 
 const DEFAULT_HEADERS = {
   'User-Agent':
@@ -33,23 +37,25 @@ class SxyprnProvider extends Provider {
   // ----------------------------------
   // Utility: Safe HTTP fetch (Cloudflare-safe)
   // ----------------------------------
-  async safeFetch(url, extraHeaders = {}) {
-    try {
-      const res = await axios.get(url, {
-        headers: {
-          ...DEFAULT_HEADERS,
-          ...extraHeaders,
-        },
-        timeout: 15000,
-        validateStatus: () => true,
-      });
+  
 
-      return res.data;
-    } catch (err) {
-      logger.error({ url, err }, 'safeFetch failed');
-      return null;
-    }
+async safeFetch(url, extraHeaders = {}) {
+  try {
+    const res = await cloudscraper.get({
+      url,
+      headers: {
+        ...DEFAULT_HEADERS,
+        ...extraHeaders,
+      },
+      jar,
+    });
+
+    return res; // already HTML
+  } catch (err) {
+    logger.error({ url, err }, 'safeFetch failed (cloudflare)');
+    return null;
   }
+}
 
   // ----------------------------------
   // Extract HLS from JWPlayer script
@@ -87,7 +93,10 @@ class SxyprnProvider extends Provider {
       // ---- LULUSTREAM / LULUVDO ----
       if (url.includes('luluvdo') || url.includes('lulustream')) {
 
-        const html = await this.safeFetch(url);
+        const html = await this.safeFetch(url, {
+  Referer: this.baseUrl,
+  Origin: this.baseUrl,
+});
 
         if (!html) return null;
 
@@ -242,6 +251,8 @@ class SxyprnProvider extends Provider {
       videoUrl = 'https:' + videoUrl;
     }
 
+logger.info({ videoUrl }, "EXTRACTED URL");
+
     return new meta.MetaResponse(
       id,
       Provider.TYPE,
@@ -260,32 +271,65 @@ class SxyprnProvider extends Provider {
   // ----------------------------------
   async getStreams(meta) {
 
-    if (!meta.videoPageUrl) {
-      return { streams: [] };
+  if (!meta.id) {
+    return { streams: [] };
+  }
+
+  // 🔥 REFRESH PAGE EVERY TIME (token fix)
+  const html = await this.safeFetch(meta.id);
+  if (!html) return { streams: [] };
+
+  const refreshed = await this.parseVideoPage({
+    id: meta.id,
+    html
+  });
+
+  const url = refreshed?.videoPageUrl;
+
+  if (!url) {
+    logger.error("No stream after refresh");
+    return { streams: [] };
+  }
+
+  const getReferer = (u) => {
+    try {
+      const parsed = new URL(u);
+      return `${parsed.protocol}//${parsed.hostname}/`;
+    } catch {
+      return this.baseUrl;
     }
+  };
 
-    return {
-      streams: [
-        {
-          name: "OnlyPorn Auto",
-          title: "Universal Stream",
-          url: meta.videoPageUrl,
+  const referer = getReferer(url);
+  const isHls = url.includes('.m3u8');
 
-          behaviorHints: {
-            notWebReady: false,
+  logger.info({ url, referer }, "FINAL STREAM");
 
-            proxyHeaders: {
-              request: {
-                Referer: this.baseUrl,
-                Origin: this.baseUrl,
-                'User-Agent': DEFAULT_HEADERS['User-Agent'],
-              }
+  return {
+    streams: [
+      {
+        name: "OnlyPorn Ultra",
+        title: "Auto Refreshed Stream",
+
+        url,
+        type: isHls ? "hls" : undefined,
+
+        behaviorHints: {
+          notWebReady: false,
+
+          proxyHeaders: {
+            request: {
+              Referer: referer,
+              Origin: referer,
+              'User-Agent': DEFAULT_HEADERS['User-Agent'],
+              'Accept': '*/*',
             }
           }
         }
-      ]
-    };
-  }
+      }
+    ]
+  };
+}
 }
 
 module.exports = SxyprnProvider.create;
