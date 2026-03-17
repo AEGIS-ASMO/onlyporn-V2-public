@@ -266,30 +266,28 @@ class SxyprnProvider extends Provider {
       videoUrl = this.extractHTMLVideo(html);  
     }  
   
-    // 🔥 4. EMBED (SAFE)
-    if (!videoUrl) {
-      const idMatch = id.match(/post\/([^.]+)/);
+    // 🔥 4. EMBED (ONLY if iframe gives embed)
+if (!videoUrl) {
+  const iframe = this.extractIframe(html);
 
-      if (idMatch) {
-        const embedUrl = `${this.baseUrl}/embed/${idMatch[1]}`;
+  if (iframe && iframe.includes('/embed/')) {
+    logger.info({ iframe }, "TRYING EMBED FROM IFRAME");
 
-        logger.info({ embedUrl }, "TRYING EMBED");
+    let embedHtml = '';
 
-        let embedHtml = '';
-
-        try {
-          embedHtml = await this.fetchHtml(embedUrl);
-        } catch (e) {
-          logger.warn("Embed failed (404 expected)");
-        }
-
-        if (embedHtml && !this.isBlocked(embedHtml)) {
-          videoUrl =
-            this.extractJWPlayer(embedHtml) ||
-            this.extractHTMLVideo(embedHtml);
-        }
-      }
+    try {
+      embedHtml = await this.fetchHtml(iframe);
+    } catch (e) {
+      logger.warn("Embed iframe failed");
     }
+
+    if (embedHtml && !this.isBlocked(embedHtml)) {
+      videoUrl =
+        this.extractJWPlayer(embedHtml) ||
+        this.extractHTMLVideo(embedHtml);
+    }
+  }
+}
 
     // 🔥 5. JSON fallback  
     if (!videoUrl) {  
