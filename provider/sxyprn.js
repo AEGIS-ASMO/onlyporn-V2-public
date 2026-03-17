@@ -36,24 +36,24 @@ class SxyprnProvider extends Provider {
   
 
 async safeFetch(url, extraHeaders = {}) {
-    try {
-        const res = await axios.get(url, {
-              headers: {
-                      ...DEFAULT_HEADERS,
-                              ...extraHeaders,
-                                      Referer: this.baseUrl,
-                                              Origin: this.baseUrl,
-                                                    },
-                                                          timeout: 15000,
-                                                                validateStatus: () => true,
-                                                                    });
+  try {
+    const res = await axios.get(url, {
+      headers: {
+        ...DEFAULT_HEADERS,
+        ...extraHeaders,
+        Referer: this.baseUrl,
+        Origin: this.baseUrl,
+      },
+      timeout: 15000,
+      validateStatus: () => true,
+    });
 
-                                                                        return res.data;
-                                                                          } catch (err) {
-                                                                              logger.error({ url, err }, 'safeFetch failed');
-                                                                                  return null;
-                                                                                    }
-                                                                                    }
+    return res.data;
+  } catch (err) {
+    logger.error({ url, err }, 'safeFetch failed');
+    return null;
+  }
+}
 }
 
   // ----------------------------------
