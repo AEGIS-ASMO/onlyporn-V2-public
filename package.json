@@ -11,9 +11,10 @@
     "dev": "LOG_ENABLED=true LOG_LEVEL=info nodemon server.js"
   },
   "dependencies": {
-    "axios": "^1.6.8",
+    "axios": "^1.13.6",
     "axios-cookiejar-support": "5",
     "cheerio": "^1.0.0-rc.12",
+    "cloudscraper": "^4.6.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "fast-geoip": "^1.1.88",
