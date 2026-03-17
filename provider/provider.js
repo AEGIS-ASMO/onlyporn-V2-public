@@ -7,6 +7,13 @@ const client = wrapper(axios.create({ jar }));
 const m3u8 = require('m3u8-parser');
 const logger = require('../logger');
 
+/* =========================
+   🔥 ADDED (SAFE GLOBALS)
+========================= */
+const cache = new Map();     // 🧠 response cache
+const pending = new Map();   // 🔁 request deduplication
+/* ========================= */
+
 class Provider {
   static LIMIT = 50;
   static TYPE = 'movie';
@@ -35,11 +42,24 @@ class Provider {
     return new Provider('', 'default');
   }
 
+  /* =========================
+     🚀 OPTIMIZED fetchHtml
+  ========================= */
   async fetchHtml(url) {
-  console.info('fetching url', url);
+    console.info('fetching url', url);
 
-  try {
-    const response = await client.get(url, {
+    // ⚡ CACHE HIT (5 sec TTL)
+    const cached = cache.get(url);
+    if (cached && (Date.now() - cached.time < 5000)) {
+      return cached.data;
+    }
+
+    // 🔁 PREVENT DUPLICATE PARALLEL REQUESTS
+    if (pending.has(url)) {
+      return pending.get(url);
+    }
+
+    const request = client.get(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
@@ -51,36 +71,50 @@ class Provider {
         "Connection": "keep-alive"
       },
       timeout: 15000
+    })
+    .then(response => {
+      // 💾 SAVE TO CACHE
+      cache.set(url, {
+        data: response.data,
+        time: Date.now()
+      });
+
+      pending.delete(url);
+      return response.data;
+    })
+    .catch(error => {
+      pending.delete(url);
+      console.error(error);
+      return '';
     });
 
-    return response.data;
+    pending.set(url, request);
 
-  } catch (error) {
-    console.error(error);
-    return '';
+    return request;
   }
-}
 
-async fetchJson(url) {
+  /* ========================= */
 
-  try {
-    const response = await client.get(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Referer": this.baseUrl
-      },
-      timeout: 15000
-    });
+  async fetchJson(url) {
 
-    return response.data;
+    try {
+      const response = await client.get(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
+          "Accept": "application/json, text/plain, */*",
+          "Referer": this.baseUrl
+        },
+        timeout: 15000
+      });
 
-  } catch (error) {
-    console.error("fetchJson error", error);
-    return null;
+      return response.data;
+
+    } catch (error) {
+      console.error("fetchJson error", error);
+      return null;
+    }
   }
-}
 
   cleanUrl(url) {
     if (!url) return url;
@@ -141,21 +175,19 @@ async fetchJson(url) {
       }
 
       if (args.extra.skip) {
-  const paginated = this.handlePagination(url, args);
+        const paginated = this.handlePagination(url, args);
 
-  if (paginated.startsWith('http')) {
-    // ✅ full URL (like xhamster)
-    url = paginated;
-  } else {
-    // ✅ relative (like ?page=2)
-    url += paginated;
-  }
-}
+        if (paginated.startsWith('http')) {
+          url = paginated;
+        } else {
+          url += paginated;
+        }
+      }
 
-if (url.match(/https?:\/\/.*https?:\/\//)) {
-  logger.error("❌ Broken URL detected:", url);
-  return { metas: [] };
-}
+      if (url.match(/https?:\/\/.*https?:\/\//)) {
+        logger.error("❌ Broken URL detected:", url);
+        return { metas: [] };
+      }
 
       const html = await this.fetchHtml(url).catch(() => '');
       const metas = this.getCatalogMetas(html);
@@ -230,55 +262,50 @@ if (url.match(/https?:\/\/.*https?:\/\//)) {
 
     const meta = await this.parseVideoPage({ id, html });
 
-if (!meta) {
-  return { streams: [] };
-}
-
-/*
- If provider returns an embed page instead of playlist,
- extract playlist from it.
-*/
-if (meta.videoPageUrl && meta.videoPageUrl.includes('/embed/')) {
-
-  const embedHtml = await this.fetchHtml(meta.videoPageUrl);
-
-  const m3u8 = embedHtml.match(/(?:https?:)?\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
-
-  if (m3u8) {
-
-    let url = m3u8[0];
-
-    if (url.startsWith("//")) {
-      url = "https:" + url;
+    if (!meta) {
+      return { streams: [] };
     }
 
-    meta.videoPageUrl = this.cleanUrl(url);
-  }
+    if (meta.videoPageUrl && meta.videoPageUrl.includes('/embed/')) {
 
-}
+      const embedHtml = await this.fetchHtml(meta.videoPageUrl);
 
-const result = await this.getStreams(meta);
+      const m3u8 = embedHtml.match(/(?:https?:)?\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
 
-if (result.streams && result.streams.length) {
-  return result;
-}
+      if (m3u8) {
 
-const mp4 = html.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
-if (mp4) {
-  return {
-    streams: [{
-      type: 'movie',
-      url: this.cleanUrl(mp4[0]),
-      name: 'MP4',
-      behaviorHints: {
-        notWebReady: false
+        let url = m3u8[0];
+
+        if (url.startsWith("//")) {
+          url = "https:" + url;
+        }
+
+        meta.videoPageUrl = this.cleanUrl(url);
       }
-    }]
-  };
-}
+    }
 
-return { streams: [] };
-}
+    const result = await this.getStreams(meta);
+
+    if (result.streams && result.streams.length) {
+      return result;
+    }
+
+    const mp4 = html.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/i);
+    if (mp4) {
+      return {
+        streams: [{
+          type: 'movie',
+          url: this.cleanUrl(mp4[0]),
+          name: 'MP4',
+          behaviorHints: {
+            notWebReady: false
+          }
+        }]
+      };
+    }
+
+    return { streams: [] };
+  }
 
   getStreams(meta) {
 
@@ -287,14 +314,14 @@ return { streams: [] };
     }
 
     if (/\.mp4(\?|$)/i.test(meta.videoPageUrl)) {
-  return Promise.resolve({
-    streams: [{
-      type: 'movie',
-      url: meta.videoPageUrl,
-      name: 'MP4'
-    }]
-  });
-}
+      return Promise.resolve({
+        streams: [{
+          type: 'movie',
+          url: meta.videoPageUrl,
+          name: 'MP4'
+        }]
+      });
+    }
 
     return this.fetchHtml(meta.videoPageUrl)
 
@@ -365,13 +392,13 @@ return { streams: [] };
       logger.debug({ streams }, 'streams', streams.length);
 
       return streams.map(stream => ({
-  type: 'movie',
-  url: stream.url,
-  name: stream.resolution,
-  behaviorHints: {
-    notWebReady: true
-  }
-}));
+        type: 'movie',
+        url: stream.url,
+        name: stream.resolution,
+        behaviorHints: {
+          notWebReady: true
+        }
+      }));
 
     } catch (e) {
 
