@@ -6,13 +6,14 @@ const { meta } = require('../model');
 const Provider = require('./provider');
 
 const sortByMappings = {
-  Latest: 'latest',
-  Trending: 'trending',
-  Views: 'views',
-  Orgasmic: 'orgasmic',
+  'Latest': 'latest',
+  'Trending': 'trending',
+  'Views': 'views',
+  'Orgasmic': 'orgasmic',
 };
 
 class SxyprnProvider extends Provider {
+
   constructor() {
     super('https://www.sxyprn.com', 'sxyprn', 25);
   }
@@ -30,6 +31,7 @@ class SxyprnProvider extends Provider {
   }
 
   handleGenre({ extra: { genre } }) {
+
     if (genre.includes('/cat')) {
       return `${this.baseUrl}${genre}`;
     }
@@ -37,23 +39,28 @@ class SxyprnProvider extends Provider {
     let [category, sortBy] = genre.split('(');
 
     category = category.trim().replace(/\s+/g, '-');
+
     sortBy = sortByMappings[(sortBy || '').replace(')', '')] || 'latest';
 
     return `${this.baseUrl}/${category}.html?sm=${sortBy}`;
   }
 
   handlePagination(url, { extra: { skip } }) {
+
     const page = this.page(skip);
+
     return url.includes('?')
       ? `${url}&page=${page}`
       : `${url}?page=${page}`;
   }
 
   getCatalogMetas(html) {
+
     const metadataList = [];
     const $ = load(html);
 
     $('.post_el_small, .thumb').each((_, element) => {
+
       const $e = $(element);
 
       const title =
@@ -96,48 +103,54 @@ class SxyprnProvider extends Provider {
   }
 
   async getMetadata(args) {
+
     logger.debug({ args }, 'getMetadata');
+
     const { id } = args;
 
-    return this.fetchHtml(id).then(html =>
-      this.parseVideoPage({ id, html }),
-    );
+    return this.fetchHtml(id)
+      .then(html => this.parseVideoPage({ id, html }));
   }
 
   parseVideoPage({ id, html }) {
+
     const $ = load(html);
 
-    const title = $('meta[property="og:title"]').attr('content');
+    const title =
+      $('meta[property="og:title"]').attr('content');
 
-    let poster = $('meta[property="og:image"]').attr('content');
+    let poster =
+      $('meta[property="og:image"]').attr('content');
+
     if (poster && poster.startsWith('//')) {
       poster = 'https:' + poster;
     }
 
-    const description = $('meta[property="og:description"]').attr('content');
+    const description =
+      $('meta[property="og:description"]').attr('content');
 
     let videoUrl = null;
 
-    // =========================
-    // 1. Direct <video> source
-    // =========================
+    // -----------------------------
+    // 1. Direct <video> tag
+    // -----------------------------
     const videoTag = $('video source').attr('src');
+
     if (videoTag) {
       videoUrl = videoTag.startsWith('http')
         ? videoTag
         : 'https:' + videoTag;
     }
 
-    // =========================
+    // -----------------------------
     // 2. trafficdeposit (primary)
-    // =========================
+    // -----------------------------
     if (!videoUrl) {
       const mgfs = $('#player_el').attr('data-mgfs');
       const thumb = poster || '';
 
-      let hash = null;
       const hashMatch = thumb.match(/\/img\/([^/]+)\//);
-      if (hashMatch) hash = hashMatch[1];
+      const hash = hashMatch ? hashMatch[1] : null;
 
       if (mgfs && hash) {
         const cdnMatch = thumb.match(/\/\/(b\d+)\.trafficdeposit/);
@@ -145,13 +158,13 @@ class SxyprnProvider extends Provider {
 
         videoUrl = `https://${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
 
-        logger.debug({ hash, mgfs, videoUrl }, 'trafficdeposit stream');
+        logger.debug({ hash, mgfs, videoUrl }, "trafficdeposit stream");
       }
     }
 
-    // =========================
+    // -----------------------------
     // 3. JWPlayer (LuluStream)
-    // =========================
+    // -----------------------------
     if (!videoUrl) {
       const script = $('script')
         .filter((_, el) => $(el).html()?.includes('jwplayer'))
@@ -160,16 +173,17 @@ class SxyprnProvider extends Provider {
 
       if (script) {
         const match = script.match(/file:\s*"(https?:\/\/[^"]+\.m3u8[^"]*)"/);
+
         if (match) {
           videoUrl = match[1];
-          logger.debug({ videoUrl }, 'JWPlayer stream');
+          logger.debug({ videoUrl }, "JWPlayer stream");
         }
       }
     }
 
-    // =========================
-    // 4. MP4 fallback (scripts)
-    // =========================
+    // -----------------------------
+    // 4. Generic MP4 fallback
+    // -----------------------------
     if (!videoUrl) {
       const scripts = $('script')
         .map((_, el) => $(el).html())
@@ -177,63 +191,71 @@ class SxyprnProvider extends Provider {
         .join('\n');
 
       const match = scripts.match(/(https?:\/\/[^"]+\.mp4)/);
+
       if (match) {
         videoUrl = match[1];
-        logger.debug({ videoUrl }, 'MP4 fallback');
+        logger.debug({ videoUrl }, "MP4 fallback");
       }
     }
 
-    // =========================
+    // -----------------------------
     // 5. iframe fallback
-    // =========================
+    // -----------------------------
     if (!videoUrl) {
       const iframeSrc = $('iframe').attr('src');
+
       if (iframeSrc) {
         videoUrl = iframeSrc.startsWith('http')
           ? iframeSrc
           : 'https:' + iframeSrc;
 
-        logger.debug({ videoUrl }, 'iframe fallback');
+        logger.debug({ videoUrl }, "iframe fallback");
       }
     }
 
-    // =========================
-    // Normalize final URL
-    // =========================
+    // -----------------------------
+    // Normalize URL
+    // -----------------------------
     if (videoUrl && videoUrl.startsWith('//')) {
       videoUrl = 'https:' + videoUrl;
     }
 
-    return new meta.MetaResponse(id, Provider.TYPE, title, {
-      description,
-      poster,
-      background: poster,
-      videoPageUrl: videoUrl,
-    });
+    return new meta.MetaResponse(
+      id,
+      Provider.TYPE,
+      title,
+      {
+        description,
+        poster,
+        background: poster,
+        videoPageUrl: videoUrl,
+      },
+    );
   }
 
-  async getStreams(metaObj) {
-    if (!metaObj.videoPageUrl) {
+  async getStreams(meta) {
+
+    if (!meta.videoPageUrl) {
       return { streams: [] };
     }
 
     return {
       streams: [
         {
-          name: 'OnlyPorn HD',
-          title: 'SxyPrn',
-          url: metaObj.videoPageUrl,
+          name: "OnlyPorn HD",
+          title: "SxyPrn",
+          url: meta.videoPageUrl,
           behaviorHints: {
             notWebReady: false,
             proxyHeaders: {
               request: {
-                Referer: 'https://www.sxyprn.com/',
-                Origin: 'https://www.sxyprn.com',
-              },
-            },
-          },
-        },
-      ],
+                Referer: "https://www.sxyprn.com/",
+                Origin: "https://www.sxyprn.com"
+              }
+            }
+          }
+        }
+      ]
     };
   }
 }
