@@ -1,72 +1,55 @@
 const { load } = require('cheerio');
-const axios = require('axios');
 const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
-const BASE_URL = 'https://missav.ws';
+const pathMappings = {
+  'Uncensored leak': '/dm628/en/uncensored-leak',
+  'Most viewed today': '/dm291/en/today-hot',
+  'Weekly hot': '/dm169/en/weekly-hot',
+  'Monthly hot': '/dm263/en/monthly-hot',
+  'New releases': '/dm590/en/release',
+};
 
 class MissavProvider extends Provider {
 
   constructor() {
-    super(BASE_URL, 'missav', 10);
+    super('https://missav.ws', 'missav', 10);
   }
 
   static create() {
     return new MissavProvider();
   }
 
-  // ✅ FIXED: correct working route
   getInitialUrl() {
-    return `${BASE_URL}/dm223/en`;
+    return `${this.baseUrl}/dm428/en/new?sort=published_at`;
   }
 
   handleSearch({ extra: { search: keyword } }) {
-    return `${BASE_URL}/search/${encodeURIComponent(keyword)}`;
+    return `${this.baseUrl}/search/${keyword}/`;
   }
 
-  handlePagination() {
-    // ❌ pagination not real → return same URL
-    return '';
+  handleGenre({ extra: { genre } }) {
+    return this.baseUrl + pathMappings[genre];
   }
 
-  // ✅ IMPORTANT: custom fetch with headers (Cloudflare bypass attempt)
-  async fetchHtml(url) {
-    try {
-      const res = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          'Referer': BASE_URL,
-          'Origin': BASE_URL,
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-      });
-
-      return res.data;
-    } catch (err) {
-      logger.error('MissAV fetch failed', err.message);
-      return '';
-    }
+  handlePagination(url, { extra: { skip } }) {
+    const prefix = url.includes('?') ? '&' : '?';
+    return `${url}${prefix}page=${this.page(skip)}`;
   }
 
-  // ✅ FIXED: new parser based on your dump structure
   getCatalogMetas(html) {
     const $ = load(html);
-    const metas = [];
+    const metadatas = [];
 
-    $('a[href*="/en/"]').each((_, el) => {
-      const href = $(el).attr('href');
+    $('div.thumbnail.group').each((_, el) => {
+      const poster = $(el).find('img').attr('data-src');
+      const title = $(el).find('a').last().text().trim();
+      const href = $(el).find('a').attr('href');
 
-      // skip non-video links
-      if (!href || !href.includes('/en/') || href.includes('/dm')) return;
-
-      const img = $(el).find('img');
-      const poster = img.attr('data-src') || img.attr('src');
-      const title = img.attr('alt') || $(el).text().trim();
-
-      if (href && poster && title) {
-        metas.push(new meta.MetaPreview(
-          href.startsWith('http') ? href : BASE_URL + href,
+      if (href) {
+        metadatas.push(new meta.MetaPreview(
+          href,
           'movie',
           title,
           poster
@@ -74,48 +57,95 @@ class MissavProvider extends Provider {
       }
     });
 
-    return metas;
+    return metadatas;
   }
 
-  async getMetadata({ id }) {
-    const html = await this.fetchHtml(id);
-    return this.parseVideoPage({ id, html }).metaResponse;
+  async getMetadata(args) {
+    return super.getMetadata(args).then(m => m.metaResponse);
   }
 
-  // ⚠️ BEST-EFFORT stream extraction (new logic)
+  /**
+   * 🔥 Extract packed JS and unpack it
+   */
+  unpackEval(packed) {
+    try {
+      // Basic Dean Edwards unpacker
+      const evalMatch = packed.match(/eval\(function\(p,a,c,k,e,d\).*?\)\)/s);
+      if (!evalMatch) return null;
+
+      const fn = new Function(`return ${evalMatch[0]}`); // safe enough here
+      return fn();
+    } catch (e) {
+      logger.error('Unpack failed:', e);
+      return null;
+    }
+  }
+
+  /**
+   * 🔥 Extract m3u8 from unpacked or raw HTML
+   */
+  extractM3U8(html) {
+    // direct match first (sometimes present)
+    let match = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+    if (match) return match[0];
+
+    // try unpacking eval
+    const unpacked = this.unpackEval(html);
+    if (unpacked) {
+      match = unpacked.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+      if (match) return match[0];
+    }
+
+    return null;
+  }
+
   parseVideoPage({ id, html }) {
     const $ = load(html);
 
-    const title = $('meta[property="og:title"]').attr('content');
-    const image = $('meta[property="og:image"]').attr('content');
-    const desc = $('meta[property="og:description"]').attr('content');
+    // meta extraction
+    const metaMap = {};
+    $('meta').each((_, el) => {
+      const a = el.attribs;
+      metaMap[a.name || a.property] = a.content;
+    });
 
-    // ✅ NEW: try to find m3u8 directly
-    let videoPageUrl = '';
+    // 🔥 NEW: extract stream properly
+    const m3u8 = this.extractM3U8(html);
 
-    const m3u8Match = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
-
-    if (m3u8Match) {
-      videoPageUrl = m3u8Match[0];
+    if (!m3u8) {
+      logger.error('No stream found for:', id);
     }
 
+    const metaResponse = new meta.MetaResponse(
+      id,
+      Provider.TYPE,
+      metaMap['og:title'],
+      {
+        background: metaMap['og:image'],
+        description: metaMap['og:description'] || metaMap['og:title'],
+        genres: (metaMap['keywords'] || '').split(','),
+      }
+    );
+
     return {
-      metaResponse: new meta.MetaResponse(
-        id,
-        Provider.TYPE,
-        title,
-        {
-          background: image,
-          description: desc || title,
-          genres: [],
-        }
-      ),
-      videoPageUrl,
+      metaResponse,
+      videoPageUrl: m3u8,
     };
   }
 
+  /**
+   * 🔥 CRITICAL: add headers for HLS playback
+   */
   transformStream(url, stream) {
-    return stream;
+    return {
+      ...stream,
+      url,
+      headers: {
+        Referer: 'https://missav.ws/',
+        Origin: 'https://missav.ws',
+        'User-Agent': 'Mozilla/5.0',
+      },
+    };
   }
 }
 
