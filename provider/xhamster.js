@@ -83,11 +83,30 @@ class XhamsterProvider extends Provider {
 
       const $img = $a.find('img').first();
 
-      const poster =
+      const srcset = $img.attr('data-srcset');
+const bestSrc =
+  srcset?.split(',').pop()?.trim().split(' ')[0];
+
+const rawSrc =
   $img.attr('data-src') ||
-  $img.attr('data-srcset')?.split(',')[0]?.split(' ')[0] ||
-  $img.attr('src') ||
-  $img.attr('data-preview');
+  bestSrc ||
+  $img.attr('data-preview') ||
+  $img.attr('src');
+
+let poster = rawSrc;
+
+// ❌ skip base64 placeholders
+if (poster && poster.startsWith('data:')) {
+  poster = null;
+}
+
+// 🔁 force absolute URL
+if (poster && !poster.startsWith('http')) {
+  poster = this.baseUrl + poster;
+}
+
+// optional debug
+// logger.debug({ poster }, 'xhamster poster');
 
       const title =
         $img.attr('alt') ||
@@ -99,7 +118,7 @@ if (videoPageUrl && !videoPageUrl.startsWith('http')) {
   videoPageUrl = this.baseUrl + videoPageUrl;
 }
 
-      if (!videoPageUrl) return;
+if (!videoPageUrl || !poster) return;
 
       metadataList.push(
         new meta.MetaPreview(
