@@ -26,15 +26,18 @@ class MissavProvider extends Provider {
   }
 
 async fetchHtml(url) {
+ console.log('MISSAV fetchHtml:', url);
   try {
 
     await client.get(this.baseUrl, {
+      timeout: 10000,
       headers: {
         'User-Agent': 'Mozilla/5.0',
       }
     });
 
     const res = await client.get(url, {
+      timeout: 10000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
@@ -56,9 +59,9 @@ async fetchHtml(url) {
     return html;
 
   } catch (e) {
-    logger.error('MissAV fetch failed:', e.message);
-    return '';
-  }
+  console.error('MISSAV FULL ERROR:', e); // 🔥 full error
+  throw e; // 🔥 DO NOT swallow
+}
 }
 
   async getCatalog({ id, extra }) {
