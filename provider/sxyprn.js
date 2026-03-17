@@ -5,13 +5,6 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
-const axios = require('axios');
-const { wrapper } = require('axios-cookiejar-support');
-const { CookieJar } = require('tough-cookie');
-
-const jar = new CookieJar();
-const client = wrapper(axios.create({ jar }));
-
 const DEFAULT_HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
@@ -19,14 +12,6 @@ const DEFAULT_HEADERS = {
     'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
   'Connection': 'keep-alive',
-  'Upgrade-Insecure-Requests': '1',
-};
-
-const sortByMappings = {
-  'Latest': 'latest',
-  'Trending': 'trending',
-  'Views': 'views',
-  'Orgasmic': 'orgasmic',
 };
 
 class SxyprnProvider extends Provider {
@@ -40,134 +25,103 @@ class SxyprnProvider extends Provider {
   }
 
   // ----------------------------------
-  // Utility: Safe HTTP fetch (Cloudflare-safe)
+  // Helpers
   // ----------------------------------
-  
 
-async safeFetch(url, extraHeaders = {}) {
-  try {
-    const res = await client.get(url, {
-      headers: {
-        ...DEFAULT_HEADERS,
-        ...extraHeaders,
-        Referer: this.baseUrl,
-        Origin: this.baseUrl,
-      },
-      timeout: 15000,
-      validateStatus: () => true,
-    });
+  isBlocked(html) {
+    if (!html) return true;
+    return (
+      html.includes('cf-browser') ||
+      html.includes('Just a moment') ||
+      html.includes('cf-ray')
+    );
+  }
 
-if (typeof res.data === 'string') {
-      if (res.data.includes('cf-browser-verification') || res.data.includes('Just a moment')) {
-        logger.error("🚫 CLOUDFLARE BLOCKED PAGE");
-      }
-    }
+  extractJWPlayer(html) {
+    const $ = load(html);
 
-    return res.data;
-  } catch (err) {
-    logger.error({ url, err }, 'safeFetch failed');
+    const scripts = $('script')
+      .map((_, el) => $(el).html())
+      .get()
+      .join('\n');
+
+    if (!scripts) return null;
+
+    let match = scripts.match(/sources:\s*\[\s*{[^}]*file:\s*"(https?:\/\/[^"]+)"/);
+    if (match) return match[1];
+
+    match = scripts.match(/file:\s*["'](https?:\/\/[^"']+)["']/);
+    if (match) return match[1];
+
+    match = scripts.match(/video_url:\s*"(https?:\/\/[^"]+)"/);
+    if (match) return match[1];
+
     return null;
   }
-}
 
-  // ----------------------------------
-  // Extract HLS from JWPlayer script
-  // ----------------------------------
-  extractJWPlayer(html) {
-  const $ = load(html);
+  extractHTMLVideo(html) {
+    const $ = load(html);
 
-  const scripts = $('script')
-    .map((_, el) => $(el).html())
-    .get()
-    .join('\n');
+    let src =
+      $('video').attr('src') ||
+      $('video source').attr('src');
 
-  if (!scripts) return null;
+    if (src && src.startsWith('//')) {
+      src = 'https:' + src;
+    }
 
-  // 🔥 Case 1: sources array
-  let match = scripts.match(/sources:\s*\[\s*{[^}]*file:\s*"(https?:\/\/[^"]+)"/);
-  if (match) return match[1];
-
-  // 🔥 Case 2: direct file
-  match = scripts.match(/file:\s*"(https?:\/\/[^"]+)"/);
-  if (match) return match[1];
-
-  // 🔥 Case 3: video_url pattern
-match = scripts.match(/video_url:\s*"(https?:\/\/[^"]+)"/);
-if (match) return match[1];
-
-  return null;
-}
-
-extractHTMLVideo(html) {
-  const $ = load(html);
-
-  let src =
-    $('video').attr('src') ||
-    $('video source').attr('src');
-
-  if (src && src.startsWith('//')) {
-    src = 'https:' + src;
+    return src || null;
   }
 
-  return src || null;
-}
+  extractIframe(html) {
+    const $ = load(html);
+    let src = $('iframe').attr('src');
 
-extractIframe(html) {
-  const $ = load(html);
-  let src = $('iframe').attr('src');
+    if (!src) return null;
 
-  if (!src) return null;
+    if (src.startsWith('//')) {
+      src = 'https:' + src;
+    }
 
-  if (src.startsWith('//')) {
-    src = 'https:' + src;
+    if (src.startsWith('/')) {
+      src = this.baseUrl + src;
+    }
+
+    return src;
   }
 
-  // ✅ NEW: handle relative paths
-  if (src.startsWith('/')) {
-    src = this.baseUrl + src;
-  }
-
-  return src;
-}
-
   // ----------------------------------
-  // Resolve external hosts (EXTENSIBLE)
+  // External resolvers
   // ----------------------------------
+
   async resolveExternal(url) {
-
     try {
 
-      // ---- LULUSTREAM / LULUVDO ----
-      if (url.includes('luluvdo') || url.includes('lulustream')) {
+      const html = await this.fetchHtml(url);
+      if (this.isBlocked(html)) return null;
 
-        const html = await this.safeFetch(url, {
-  Referer: this.baseUrl,
-  Origin: this.baseUrl,
-});
+      // JWPlayer first
+      let stream = this.extractJWPlayer(html);
+      if (stream) return stream;
 
-        if (!html) return null;
+      // HTML5 fallback
+      stream = this.extractHTMLVideo(html);
+      if (stream) return stream;
 
-        // Try JWPlayer
-        const stream = this.extractJWPlayer(html);
-        if (stream) return stream;
-
-        // Try deeper iframe
-        const iframe = this.extractIframe(html);
-        if (iframe && iframe !== url) {
-          return await this.resolveExternal(iframe);
-        }
+      // recursive iframe
+      const iframe = this.extractIframe(html);
+      if (iframe && iframe !== url) {
+        return await this.resolveExternal(iframe);
       }
 
-      // ---- MIXDROP (future ready) ----
+      // Mixdrop
       if (url.includes('mixdrop')) {
-        const html = await this.safeFetch(url);
         const match = html?.match(/MDCore\.wurl="([^"]+)"/);
         if (match) return match[1];
       }
 
-      // ---- STREAMTAPE (future ready) ----
+      // Streamtape
       if (url.includes('streamtape')) {
-        const html = await this.safeFetch(url);
         const match = html?.match(/robotlink'\)\.innerHTML = '(.*?)'/);
         if (match) return `https:${match[1]}`;
       }
@@ -182,6 +136,7 @@ extractIframe(html) {
   // ----------------------------------
   // Catalog
   // ----------------------------------
+
   getCatalogMetas(html) {
 
     const metadataList = [];
@@ -231,12 +186,14 @@ extractIframe(html) {
   // ----------------------------------
   // Metadata
   // ----------------------------------
+
   async getMetadata({ id }) {
+    const html = await this.fetchHtml(id);
 
-    logger.debug({ id }, 'getMetadata');
-
-    const html = await this.safeFetch(id);
-    if (!html) return null;
+    if (this.isBlocked(html)) {
+      logger.error("🚫 Cloudflare blocked main page");
+      return null;
+    }
 
     return this.parseVideoPage({ id, html });
   }
@@ -244,6 +201,7 @@ extractIframe(html) {
   // ----------------------------------
   // MAIN PARSER
   // ----------------------------------
+
   async parseVideoPage({ id, html }) {
 
     const $ = load(html);
@@ -257,56 +215,69 @@ extractIframe(html) {
 
     let videoUrl = null;
 
-    // -----------------------------
-    // 1. trafficdeposit
-    // -----------------------------
-    const mgfs = $('#player_el').attr('data-mgfs');
-    const thumb = poster || '';
+    // 🔥 1. EMBED FIRST (MOST IMPORTANT)
+    const idMatch = id.match(/post\/([^.]+)/);
+    if (idMatch) {
+      const embedUrl = `${this.baseUrl}/embed/${idMatch[1]}`;
 
-    const hashMatch = thumb.match(/\/img\/([^/]+)\//);
-    const hash = hashMatch ? hashMatch[1] : null;
+      logger.info({ embedUrl }, "TRYING EMBED");
 
-    if (mgfs && hash) {
-      const cdnMatch = thumb.match(/\/\/(b\d+)\.trafficdeposit/);
-      const cdn = cdnMatch ? cdnMatch[1] : 'b1';
+      const embedHtml = await this.fetchHtml(embedUrl);
 
-      videoUrl = `https://${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
+      if (!this.isBlocked(embedHtml)) {
+        videoUrl =
+          this.extractJWPlayer(embedHtml) ||
+          this.extractHTMLVideo(embedHtml);
+      }
     }
 
-    // 2. JWPlayer
-if (!videoUrl) {
-  videoUrl = this.extractJWPlayer(html);
-}
+    // 🔥 2. trafficdeposit
+    if (!videoUrl) {
+      const mgfs = $('#player_el').attr('data-mgfs');
+      const thumb = poster || '';
 
-// 🔥 3. HTML5 video fallback (NEW)
-if (!videoUrl) {
-  videoUrl = this.extractHTMLVideo(html);
-}
+      const hashMatch = thumb.match(/\/img\/([^/]+)\//);
+      const hash = hashMatch ? hashMatch[1] : null;
 
-    // -----------------------------
-    // 3. iframe → external resolve
-    // -----------------------------
+      if (mgfs && hash) {
+        const cdnMatch = thumb.match(/\/\/(b\d+)\.trafficdeposit/);
+        const cdn = cdnMatch ? cdnMatch[1] : 'b1';
+
+        videoUrl = `https://${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
+      }
+    }
+
+    // 🔥 3. JWPlayer
+    if (!videoUrl) {
+      videoUrl = this.extractJWPlayer(html);
+    }
+
+    // 🔥 4. HTML5
+    if (!videoUrl) {
+      videoUrl = this.extractHTMLVideo(html);
+    }
+
+    // 🔥 5. JSON fallback
+    if (!videoUrl) {
+      const match = html.match(/"file":"(https:[^"]+\.m3u8[^"]*)"/);
+      if (match) {
+        videoUrl = match[1].replace(/\\u0026/g, '&');
+      }
+    }
+
+    // 🔥 6. iframe
     if (!videoUrl) {
       const iframe = this.extractIframe(html);
-
       if (iframe) {
         videoUrl = await this.resolveExternal(iframe);
       }
     }
 
-    // -----------------------------
-    // Normalize
-    // -----------------------------
     if (videoUrl?.startsWith('//')) {
       videoUrl = 'https:' + videoUrl;
     }
 
-logger.info({ videoUrl }, "EXTRACTED URL");
-logger.info({
-  jw: !!this.extractJWPlayer(html),
-  html5: !!this.extractHTMLVideo(html),
-  iframe: !!this.extractIframe(html),
-}, "PARSER STATUS");
+    logger.info({ videoUrl }, "FINAL EXTRACTED");
 
     return new meta.MetaResponse(
       id,
@@ -322,69 +293,39 @@ logger.info({
   }
 
   // ----------------------------------
-  // Streams (TOKEN + HEADERS SAFE)
+  // Streams (FIXED)
   // ----------------------------------
+
   async getStreams(meta) {
 
-  if (!meta.id) {
-    return { streams: [] };
-  }
-
-  // 🔥 REFRESH PAGE EVERY TIME (token fix)
-  const html = await this.safeFetch(meta.id);
-  if (!html) return { streams: [] };
-
-  const refreshed = await this.parseVideoPage({
-    id: meta.id,
-    html
-  });
-
-  const url = refreshed?.videoPageUrl;
-
-  if (!url) {
-    logger.error("No stream after refresh");
-    return { streams: [] };
-  }
-
-  const getReferer = (u) => {
-    try {
-      const parsed = new URL(u);
-      return `${parsed.protocol}//${parsed.hostname}/`;
-    } catch {
-      return this.baseUrl;
+    if (!meta.videoPageUrl) {
+      return { streams: [] };
     }
-  };
 
-  const referer = getReferer(url);
-  const isHls = url.includes('.m3u8');
+    const url = meta.videoPageUrl;
+    const isHls = url.includes('.m3u8');
 
-  logger.info({ url, referer }, "FINAL STREAM");
-
-  return {
-    streams: [
-      {
-        name: "OnlyPorn Ultra",
-        title: "Auto Refreshed Stream",
-
-        url,
-        type: isHls ? "hls" : undefined,
-
-        behaviorHints: {
-          notWebReady: false,
-
-          proxyHeaders: {
-            request: {
-              Referer: referer,
-              Origin: referer,
-              'User-Agent': DEFAULT_HEADERS['User-Agent'],
-              'Accept': '*/*',
+    return {
+      streams: [
+        {
+          name: "OnlyPorn Ultra",
+          title: "Direct Stream",
+          url,
+          type: isHls ? "hls" : undefined,
+          behaviorHints: {
+            notWebReady: false,
+            proxyHeaders: {
+              request: {
+                Referer: this.baseUrl,
+                Origin: this.baseUrl,
+                'User-Agent': DEFAULT_HEADERS['User-Agent'],
+              }
             }
           }
         }
-      }
-    ]
-  };
-}
+      ]
+    };
+  }
 }
 
 module.exports = SxyprnProvider.create;
