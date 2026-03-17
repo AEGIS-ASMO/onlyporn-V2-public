@@ -73,21 +73,35 @@ class SxyprnProvider extends Provider {
     return src || null;
   }
 
+  // ✅ FIX 1: Skip ad iframes
   extractIframe(html) {
     const $ = load(html);
-    let src = $('iframe').attr('src');
 
-    if (!src) return null;
+    let iframe = null;
 
-    if (src.startsWith('//')) {
-      src = 'https:' + src;
-    }
+    $('iframe').each((_, el) => {
+      const src = $(el).attr('src');
+      if (!src) return;
 
-    if (src.startsWith('/')) {
-      src = this.baseUrl + src;
-    }
+      // 🚫 block ads
+      if (
+        src.includes('adtng') ||
+        src.includes('ads') ||
+        src.includes('promo')
+      ) {
+        return;
+      }
 
-    return src;
+      iframe = src;
+      return false; // break loop
+    });
+
+    if (!iframe) return null;
+
+    if (iframe.startsWith('//')) iframe = 'https:' + iframe;
+    if (iframe.startsWith('/')) iframe = this.baseUrl + iframe;
+
+    return iframe;
   }
 
   // ----------------------------------
@@ -100,27 +114,22 @@ class SxyprnProvider extends Provider {
       const html = await this.fetchHtml(url);
       if (this.isBlocked(html)) return null;
 
-      // JWPlayer first
       let stream = this.extractJWPlayer(html);
       if (stream) return stream;
 
-      // HTML5 fallback
       stream = this.extractHTMLVideo(html);
       if (stream) return stream;
 
-      // recursive iframe
       const iframe = this.extractIframe(html);
       if (iframe && iframe !== url) {
         return await this.resolveExternal(iframe);
       }
 
-      // Mixdrop
       if (url.includes('mixdrop')) {
         const match = html?.match(/MDCore\.wurl="([^"]+)"/);
         if (match) return match[1];
       }
 
-      // Streamtape
       if (url.includes('streamtape')) {
         const match = html?.match(/robotlink'\)\.innerHTML = '(.*?)'/);
         if (match) return `https:${match[1]}`;
@@ -131,56 +140,6 @@ class SxyprnProvider extends Provider {
     }
 
     return null;
-  }
-
-  // ----------------------------------
-  // Catalog
-  // ----------------------------------
-
-  getCatalogMetas(html) {
-
-    const metadataList = [];
-    const $ = load(html);
-
-    $('.post_el_small, .thumb').each((_, element) => {
-
-      const $e = $(element);
-
-      const title =
-        $e.find('.post_text').text().trim() ||
-        $e.find('img').attr('alt');
-
-      let poster =
-        $e.find('img').attr('data-src') ||
-        $e.find('img').attr('data-original') ||
-        $e.find('img').attr('src');
-
-      if (poster && !poster.startsWith('http')) {
-        poster = 'https:' + poster;
-      }
-
-      const path =
-        $e.find('a.js-pop').attr('href') ||
-        $e.find('a').first().attr('href');
-
-      if (!path) return;
-
-      const videoPageUrl = path.startsWith('http')
-        ? path
-        : this.baseUrl + path;
-
-      metadataList.push(
-        new meta.MetaPreview(
-          videoPageUrl,
-          'movie',
-          title,
-          poster,
-          { videoPageUrl },
-        ),
-      );
-    });
-
-    return metadataList;
   }
 
   // ----------------------------------
@@ -215,49 +174,36 @@ class SxyprnProvider extends Provider {
 
     let videoUrl = null;
 
-    // 🔥 1. EMBED FIRST (MOST IMPORTANT)
-    const idMatch = id.match(/post\/([^.]+)/);
-    if (idMatch) {
-      const embedUrl = `${this.baseUrl}/embed/${idMatch[1]}`;
+    // ✅ FIX 2: trafficdeposit FIRST (primary source)
+    const mgfs = $('#player_el').attr('data-mgfs');
+    const thumb = poster || '';
 
-      logger.info({ embedUrl }, "TRYING EMBED");
+    const hashMatch = thumb.match(/\/img\/([^/]+)\//);
+    const hash = hashMatch ? hashMatch[1] : null;
 
-      const embedHtml = await this.fetchHtml(embedUrl);
+    logger.info({
+      hasMGFS: !!mgfs,
+      poster
+    }, "TRAFFICDEPOSIT CHECK"); // ✅ DEBUG
 
-      if (!this.isBlocked(embedHtml)) {
-        videoUrl =
-          this.extractJWPlayer(embedHtml) ||
-          this.extractHTMLVideo(embedHtml);
-      }
+    if (mgfs && hash) {
+      const cdnMatch = thumb.match(/\/\/(b\d+)\.trafficdeposit/);
+      const cdn = cdnMatch ? cdnMatch[1] : 'b1';
+
+      videoUrl = `https://${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
     }
 
-    // 🔥 2. trafficdeposit
-    if (!videoUrl) {
-      const mgfs = $('#player_el').attr('data-mgfs');
-      const thumb = poster || '';
-
-      const hashMatch = thumb.match(/\/img\/([^/]+)\//);
-      const hash = hashMatch ? hashMatch[1] : null;
-
-      if (mgfs && hash) {
-        const cdnMatch = thumb.match(/\/\/(b\d+)\.trafficdeposit/);
-        const cdn = cdnMatch ? cdnMatch[1] : 'b1';
-
-        videoUrl = `https://${cdn}.trafficdeposit.com/hls/${hash}/${mgfs}/master.m3u8`;
-      }
-    }
-
-    // 🔥 3. JWPlayer
+    // 2. JWPlayer
     if (!videoUrl) {
       videoUrl = this.extractJWPlayer(html);
     }
 
-    // 🔥 4. HTML5
+    // 3. HTML5
     if (!videoUrl) {
       videoUrl = this.extractHTMLVideo(html);
     }
 
-    // 🔥 5. JSON fallback
+    // 4. JSON fallback
     if (!videoUrl) {
       const match = html.match(/"file":"(https:[^"]+\.m3u8[^"]*)"/);
       if (match) {
@@ -265,7 +211,32 @@ class SxyprnProvider extends Provider {
       }
     }
 
-    // 🔥 6. iframe
+    // ✅ FIX 3: EMBED as fallback + safe 404 handling
+    if (!videoUrl) {
+      const idMatch = id.match(/post\/([^.]+)/);
+
+      if (idMatch) {
+        const embedUrl = `${this.baseUrl}/embed/${idMatch[1]}`;
+
+        logger.info({ embedUrl }, "TRYING EMBED");
+
+        let embedHtml = '';
+
+        try {
+          embedHtml = await this.fetchHtml(embedUrl);
+        } catch (e) {
+          logger.warn("Embed failed (404 expected)");
+        }
+
+        if (embedHtml && !this.isBlocked(embedHtml)) {
+          videoUrl =
+            this.extractJWPlayer(embedHtml) ||
+            this.extractHTMLVideo(embedHtml);
+        }
+      }
+    }
+
+    // 6. iframe
     if (!videoUrl) {
       const iframe = this.extractIframe(html);
       if (iframe) {
@@ -293,7 +264,7 @@ class SxyprnProvider extends Provider {
   }
 
   // ----------------------------------
-  // Streams (FIXED)
+  // Streams
   // ----------------------------------
 
   async getStreams(meta) {
