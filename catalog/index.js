@@ -25,7 +25,7 @@ const catalogs = [
   ...xhamsterCatalogs,
   ...porntrexCatalogs,
   ...spankbangCatalogs,
-  ...missavCatalog,
+  missavCatalog,
   xvideosCatalog
 ];
 
