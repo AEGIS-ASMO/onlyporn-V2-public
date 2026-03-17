@@ -50,6 +50,7 @@ class XhamsterProvider extends Provider {
 
   handlePagination(url, { extra: { skip } }) {
   const page = this.page(skip);
+if (!page || page === '1') return url;
 
   try {
     const u = new URL(url);
@@ -70,66 +71,72 @@ class XhamsterProvider extends Provider {
 }
 
   getCatalogMetas(html) {
+if (!html || html.length < 1000) {
+  return [];
+}
 
     const metadataList = [];
 
     const $ = load(html);
 
-    $('.thumb-list__item, .video-thumb').each((_, element) => {
+   let count = 0;
 
-      const $e = $(element);
+$('.thumb-list__item').each((_, element) => {
 
-      const $a = $e.find('a').first();
+  if (count >= this.limit) return false; // 🛑 STOP LOOP
 
-      const $img = $a.find('img').first();
+  const $e = $(element);
+  const $a = $e.find('a').first();
 
-      const srcset = $img.attr('data-srcset');
-const bestSrc =
-  srcset?.split(',').pop()?.trim().split(' ')[0];
+  let videoPageUrl = $a.attr('href');
 
-const rawSrc =
-  $img.attr('data-src') ||
-  bestSrc ||
-  $img.attr('data-preview') ||
-  $img.attr('src');
+  // 🚫 skip ads early
+  if (videoPageUrl && videoPageUrl.includes('/ff/out')) return;
 
-let poster = rawSrc;
+  const $img = $a.find('img').first();
 
-// ❌ skip base64 placeholders
-if (poster && poster.startsWith('data:')) {
-  poster = null;
-}
+  const srcset = $img.attr('data-srcset');
+  const bestSrc =
+    srcset?.split(',').pop()?.trim().split(' ')[0];
 
-// 🔁 force absolute URL
-if (poster && !poster.startsWith('http')) {
-  poster = this.baseUrl + poster;
-}
+  const rawSrc =
+    $img.attr('data-src') ||
+    bestSrc ||
+    $img.attr('data-preview') ||
+    $img.attr('src');
 
-// optional debug
-// logger.debug({ poster }, 'xhamster poster');
+  let poster = rawSrc;
 
-      const title =
-        $img.attr('alt') ||
-        $a.attr('title');
+  // 🚫 skip useless images EARLY
+  if (!poster || poster.startsWith('data:')) return;
 
-      let videoPageUrl = $a.attr('href');
+  // 🔁 force absolute URL
+  if (!poster.startsWith('http')) {
+    poster = this.baseUrl + poster;
+  }
 
-if (videoPageUrl && !videoPageUrl.startsWith('http')) {
-  videoPageUrl = this.baseUrl + videoPageUrl;
-}
+  if (videoPageUrl && !videoPageUrl.startsWith('http')) {
+    videoPageUrl = this.baseUrl + videoPageUrl;
+  }
 
-if (!videoPageUrl || !poster) return;
+  const title =
+    $img.attr('alt') ||
+    $a.attr('title');
 
-      metadataList.push(
-        new meta.MetaPreview(
-          videoPageUrl,
-          'movie',
-          title,
-          poster,
-          { videoPageUrl },
-        ),
-      );
-    });
+  if (!videoPageUrl || !title) return;
+
+  metadataList.push(
+    new meta.MetaPreview(
+      videoPageUrl,
+      'movie',
+      title,
+      poster,
+      { videoPageUrl },
+    ),
+  );
+
+  count++; // ✅ increment only when valid
+});
 
     return metadataList;
   }
