@@ -2,6 +2,7 @@ const { load } = require('cheerio');
 const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
+const axios = require('axios');
 
 const pathMappings = {
   'Uncensored leak': '/dm628/en/uncensored-leak',
@@ -17,13 +18,67 @@ class MissavProvider extends Provider {
     super('https://missav.ws', 'missav', 10);
   }
 
+async fetchHtml(url) {
+  try {
+    const res = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://missav.ws/',
+        'Origin': 'https://missav.ws',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      },
+      validateStatus: () => true, // 👈 IMPORTANT
+    });
+
+    if (res.status === 403) {
+      throw new Error('Cloudflare blocked request');
+    }
+
+    return res.data;
+
+  } catch (e) {
+    console.error('Fetch failed:', e.message);
+    return '';
+  }
+}
+
+async getCatalog({ id, extra }) {
+  let url = id || this.getInitialUrl();
+
+  if (extra?.skip) {
+    url = this.handlePagination(url, { extra });
+  }
+
+  const html = await this.fetchHtml(url);
+
+  if (!html) {
+    logger.error('Catalog fetch failed');
+    return [];
+  }
+
+  return this.getCatalogMetas(html);
+}
+
+async search({ extra }) {
+  const url = this.handleSearch({ extra });
+
+  const html = await this.fetchHtml(url);
+
+  if (!html) return [];
+
+  return this.getCatalogMetas(html);
+}
+
   static create() {
     return new MissavProvider();
   }
 
   getInitialUrl() {
-    return `${this.baseUrl}/dm428/en/new?sort=published_at`;
-  }
+  return `${this.baseUrl}/dm590/en/release`;
+}
 
   handleSearch({ extra: { search: keyword } }) {
     return `${this.baseUrl}/search/${keyword}/`;
@@ -43,7 +98,9 @@ class MissavProvider extends Provider {
     const metadatas = [];
 
     $('div.thumbnail.group').each((_, el) => {
-      const poster = $(el).find('img').attr('data-src');
+      const poster =
+  $(el).find('img').attr('data-src') ||
+  $(el).find('img').attr('src');
       const title = $(el).find('a').last().text().trim();
       const href = $(el).find('a').attr('href');
 
@@ -60,9 +117,17 @@ class MissavProvider extends Provider {
     return metadatas;
   }
 
-  async getMetadata(args) {
-    return super.getMetadata(args).then(m => m.metaResponse);
+  async getMetadata({ id }) {
+  const url = id.startsWith('http') ? id : this.baseUrl + id;
+
+  const html = await this.fetchHtml(url);
+
+  if (!html) {
+    throw new Error('Failed to fetch video page');
   }
+
+  return this.parseVideoPage({ id, html }).metaResponse;
+}
 
   /**
    * 🔥 Extract packed JS and unpack it
