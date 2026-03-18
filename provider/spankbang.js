@@ -3,10 +3,6 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
-// 🚀 CACHE
-const hlsCache = new Map();
-const CACHE_TTL = 1000 * 60 * 10;
-
 const pathMappings = {
   'Trending': '/trending_videos/',
   'New': '/new_videos/',
@@ -46,7 +42,13 @@ class SpankbangProvider extends Provider {
         },
       });
 
-      return await response.text();
+      const html = await response.text();
+
+      if (html.includes('SpankBang contains adult content')) {
+        logger.warn('⚠️ Blocked by age/cookie wall');
+      }
+
+      return html;
     } catch (error) {
       logger.error(error);
       return '';
@@ -54,110 +56,89 @@ class SpankbangProvider extends Provider {
   }
 
   handleGenre({ extra }) {
+    const { genre, quality } = extra;
 
-    const { genre, sort, quality } = extra;
+    const [keyword, order] = (genre || '').split('(');
 
     let url;
 
-    const qualityMap = {
-      '4k': 'uhd',
-      '1080p': 'fhd',
-      '720p': 'hd',
-    };
+    if (order) {
+      url = this.handleSearch({
+        extra: { search: keyword.trim() },
+      });
 
-    const q = qualityMap[quality];
-
-    if (!genre || genre === 'All' || ['4k', '1080p', '720p'].includes(genre)) {
-
-      const path = pathMappings[
-        sort ? sort.charAt(0).toUpperCase() + sort.slice(1) : 'Trending'
-      ] || pathMappings.Trending;
-
+      const u = new URL(url);
+      u.searchParams.set('o', order.replace(')', '').toLowerCase());
+      url = u.toString();
+    } else {
+      const path = pathMappings[keyword] || pathMappings.New;
       url = `${this.baseUrl}${path}`;
+    }
+
+    if (quality) {
+      const qualityMap = {
+        '4k': 'uhd',
+        '1080p': 'fhd',
+        '720p': 'hd',
+      };
+
+      const q = qualityMap[quality];
 
       if (q) {
         const u = new URL(url);
         u.searchParams.set('q', q);
         url = u.toString();
       }
-
-    } else {
-
-      url = `${this.baseUrl}/s/${encodeURIComponent(genre)}/`;
-
-      const u = new URL(url);
-
-      if (q) {
-        u.searchParams.set('q', q);
-      }
-
-      const sortMap = {
-        'trending': '',
-        'popular': 'views',
-        'new': 'new',
-        'featured': 'featured'
-      };
-
-      if (sort) {
-        const mapped = sortMap[sort.toLowerCase()];
-        if (mapped) {
-          u.searchParams.set('o', mapped);
-        }
-      }
-
-      url = u.toString();
     }
 
-    const finalUrl = new URL(url);
-    finalUrl.searchParams.set('_', Date.now());
-
-    url = finalUrl.toString();
-
-    logger.info({ url }, 'FINAL GENRE URL');
+    logger.info({ finalUrl: url }, 'catalog URL');
 
     return url;
   }
 
   handlePagination(url, { extra: { skip } }) {
     const page = this.page(skip);
+
     const u = new URL(url);
     u.searchParams.set('page', page);
+
     return u.toString();
   }
 
   getCatalogMetas(html) {
+
     const metadataList = [];
     const $ = load(html);
 
     const items = $('[data-id], .video-item, .video-list-item');
-    const seen = new Set();
 
     items.each((index, element) => {
+
       const $e = $(element);
 
       const link = $e.find('a').attr('href');
-      if (!link || seen.has(link)) return;
-      seen.add(link);
-
       const img = $e.find('img');
 
       let poster =
         img.attr('data-src') ||
-        img.attr('data-preview') ||
-        img.attr('src');
+        img.attr('src') ||
+        img.attr('data-preview');
 
-      const srcset = img.attr('data-srcset') || img.attr('srcset');
-      if (srcset) {
-        const parts = srcset.split(',');
-        const best = parts[parts.length - 1]?.trim().split(' ')[0];
-        if (best) poster = best;
-      }
-
+      // 🔥 Upgrade thumbnail quality
       if (poster) {
-        poster = poster
-          .replace(/\/small\//, '/large/')
-          .replace(/\/medium\//, '/large/')
-          .replace(/\/thumbs\//, '/thumbs/large/');
+        try {
+          const u = new URL(poster);
+          u.pathname = u.pathname
+            .replace(/\/small\//, '/large/')
+            .replace(/\/medium\//, '/large/')
+            .replace(/\/thumbs\//, '/thumbs/large/');
+          poster = u.toString();
+        } catch {
+          poster = poster
+            .replace('/small/', '/large/')
+            .replace('/medium/', '/large/')
+            .replace('/thumbs/', '/thumbs/large/');
+        }
       }
 
       const title =
@@ -167,21 +148,28 @@ class SpankbangProvider extends Provider {
 
       if (!link || !title) return;
 
+      const videoPageUrl = this.baseUrl + link;
+
       metadataList.push(
         new meta.MetaPreview(
-          this.baseUrl + link,
+          videoPageUrl,
           'movie',
           title,
           poster,
-          { videoPageUrl: this.baseUrl + link },
+          { videoPageUrl },
         ),
       );
     });
+
+    logger.debug({ count: metadataList.length }, 'catalog items parsed');
 
     return metadataList;
   }
 
   async getMetadata(args) {
+
+    logger.debug({ args }, 'getMetadata');
+
     const { id } = args;
 
     return this.fetchHtml(id)
@@ -192,6 +180,7 @@ class SpankbangProvider extends Provider {
       });
   }
 
+  // 🔥 NOW ASYNC
   async parseVideoPage({ html }) {
 
     const $ = load(html);
@@ -208,189 +197,159 @@ class SpankbangProvider extends Provider {
       .get()
       .join('\n');
 
+    const regex = /stream_data\s*=\s*(\{[^;]+\})/;
+    const match = scripts.match(regex);
+
     let streams = [];
 
-    const fileMatches = scripts.match(/"(\d{3,4}p|4k)"\s*:\s*"([^"]+)"/gi);
-
-    if (fileMatches) {
-      const added = new Set();
-
-      fileMatches.forEach(entry => {
-        const match = entry.match(/"(\d{3,4}p|4k)"\s*:\s*"([^"]+)"/i);
-        if (!match) return;
-
-        const quality = match[1].toLowerCase();
-        const url = match[2];
-
-        if (!url || added.has(url)) return;
-        added.add(url);
-
-        let name = quality.toUpperCase();
-
-        if (quality === '4k' || quality === '2160p') name = '🔥 4K';
-
-        streams.push({
-          name,
-          url,
-          type: 'mp4'
-        });
-      });
-
-      logger.info({ streams }, 'MP4 QUALITY FOUND');
-    }
-
-    const jsonMatch = scripts.match(/window\.__data\s*=\s*(\{[\s\S]*?\});/);
-
-    if (jsonMatch) {
+    // ✅ Original method (kept)
+    if (match) {
       try {
-        const data = JSON.parse(jsonMatch[1]);
-        const files = data?.video?.files || {};
+        let jsonString = match[1];
+        jsonString = jsonString.replace(/(\w+):/g, '"$1":');
 
-        Object.entries(files).forEach(([quality, url]) => {
-          if (!url) return;
+        const streamsData = JSON.parse(jsonString);
 
-          streams.push({
-            name: quality.toUpperCase(),
-            url,
-            type: 'mp4'
-          });
-        });
+        streams = Object.entries(streamsData).map(([quality, url]) => ({
+          name: quality,
+          url,
+          type: Provider.TYPE,
+        }));
 
-        logger.info({ files }, 'MP4 FILES');
-      } catch {
-        logger.warn('JSON parse failed');
+      } catch (e) {
+        logger.warn({ error: e }, '⚠️ Failed to parse stream_data');
       }
     }
 
-    const m3u8Match = scripts.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+    // 🚀 ADVANCED HLS PARSER
+    if (!streams.length) {
+      const m3u8Match = scripts.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
 
-    if (m3u8Match) {
-      const masterUrl = m3u8Match[0];
+      if (m3u8Match) {
+        const masterUrl = m3u8Match[0];
 
-      try {
+        try {
+          console.log('MASTER PLAYLIST:', masterUrl);
 
-        if (hlsCache.has(masterUrl)) {
-          const cached = hlsCache.get(masterUrl);
-          if (Date.now() - cached.time < CACHE_TTL) {
-            logger.info('CACHE HIT');
-            streams = [...streams, ...cached.streams];
+          const res = await fetch(masterUrl);
+          const text = await res.text();
+
+          const lines = text.split('\n');
+          const variants = [];
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            if (line.includes('#EXT-X-STREAM-INF')) {
+
+              const resolutionMatch = line.match(/RESOLUTION=\d+x(\d+)/);
+              const height = resolutionMatch ? parseInt(resolutionMatch[1]) : 0;
+
+              const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/);
+              const bitrate = bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0;
+
+              let codec = 'AVC';
+              if (/hev1|hvc1/i.test(line)) codec = 'HEVC';
+
+              let isHDR = false;
+              let isDV = false;
+
+              if (line.includes('VIDEO-RANGE=PQ') || line.includes('VIDEO-RANGE=HLG')) {
+                isHDR = true;
+              }
+
+              if (/hdr/i.test(line)) isHDR = true;
+
+              if (/dvhe|dvh1|dolby/i.test(line)) {
+                isDV = true;
+                isHDR = true;
+              }
+
+              const nextLine = lines[i + 1];
+
+              if (nextLine) {
+                let streamUrl = new URL(nextLine, masterUrl).toString();
+
+                if (/hdr|hlg/i.test(streamUrl)) isHDR = true;
+                if (/dv|dolby/i.test(streamUrl)) {
+                  isDV = true;
+                  isHDR = true;
+                }
+                if (/hevc|h265/i.test(streamUrl)) codec = 'HEVC';
+
+                let name = height ? `${height}p` : 'Auto';
+
+                if (isDV) name += ' DV';
+                else if (isHDR) name += ' HDR';
+
+                name += ` ${codec}`;
+
+                if (bitrate) {
+                  const mbps = (bitrate / 1000000).toFixed(1);
+                  name += ` ${mbps}Mbps`;
+                }
+
+                variants.push({
+                  name,
+                  url: streamUrl,
+                  type: Provider.TYPE,
+                  height,
+                  bitrate,
+                  isHDR,
+                  isDV,
+                  codec,
+                });
+              }
+            }
           }
+
+          streams = variants.sort((a, b) => {
+            if (b.height !== a.height) return b.height - a.height;
+            if (b.isDV !== a.isDV) return b.isDV - a.isDV;
+            if (b.isHDR !== a.isHDR) return b.isHDR - a.isHDR;
+            if (b.codec !== a.codec) return b.codec === 'HEVC' ? 1 : -1;
+            return b.bitrate - a.bitrate;
+          }).map(({ height, bitrate, isHDR, isDV, codec, ...rest }) => rest);
+
+          console.log('FINAL STREAMS:', streams);
+
+        } catch (err) {
+          logger.warn({ err }, '⚠️ Failed parsing m3u8');
         }
+      }
+    }
 
-        const res = await fetch(masterUrl, {
-          headers: {
-            'referer': 'https://spankbang.com/',
-            'user-agent': 'Mozilla/5.0'
-          }
-        });
+    // 🔥 MP4 fallback (SAFE)
+    if (!streams.length) {
+      const urls = scripts.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/g);
 
-        const text = await res.text();
+      if (urls && urls.length) {
+        streams = urls.map(u => ({
+          name: 'mp4',
+          url: u,
+          type: Provider.TYPE,
+        }));
 
-        const lines = text.split('\n');
-        const variants = [];
-
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-
-          if (line.includes('#EXT-X-STREAM-INF')) {
-
-            const height = parseInt(line.match(/RESOLUTION=\d+x(\d+)/)?.[1] || 0);
-            const bitrate = parseInt(line.match(/BANDWIDTH=(\d+)/)?.[1] || 0);
-
-            let isHDR = /VIDEO-RANGE=PQ|VIDEO-RANGE=HLG|hdr/i.test(line);
-            let isDV = /dvhe|dvh1|dolby/i.test(line);
-
-            const next = lines[i + 1];
-            if (!next) continue;
-
-            let streamUrl = new URL(next, masterUrl).toString();
-            if (!height || !streamUrl) continue;
-
-            variants.push({
-              url: streamUrl,
-              height,
-              bitrate,
-              isHDR,
-              isDV
-            });
-          }
-        }
-
-        variants.sort((a, b) => b.height - a.height || b.bitrate - a.bitrate);
-
-        const hlsStreams = variants.map(v => {
-          let name = `${v.height}p`;
-
-          if (v.height >= 2160) name = '4K';
-          else if (v.height >= 1440) name = '1440p';
-
-          if (v.isDV) name += ' Dolby Vision';
-          else if (v.isHDR) name += ' HDR';
-
-          if (v.bitrate > 10000000) name += ' High Bitrate';
-
-          return {
-            name,
-            url: v.url,
-            type: 'hls'
-          };
-        });
-
-        streams = [...streams, ...hlsStreams];
-
-        hlsCache.set(masterUrl, {
-          streams: hlsStreams,
-          time: Date.now()
-        });
-
-        logger.info({ variants }, 'HLS VARIANTS');
-
-      } catch (e) {
-        logger.warn({ e }, 'HLS failed');
+        console.log('MP4 FALLBACK:', streams);
       }
     }
 
     if (!streams.length) {
-      const urls = scripts.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/g);
-
-      if (urls) {
-        streams = urls.map(u => ({
-          name: 'mp4',
-          url: u,
-          type: Provider.TYPE
-        }));
-      }
+      logger.warn('⚠️ No streams found');
+      return {};
     }
 
-    if (!streams.length) return {};
-
-    // 🔥 FINAL CLEANUP
-    const unique = new Map();
-    streams.forEach(s => {
-      if (!s.url) return;
-      unique.set(s.url, s);
-    });
-
-    streams = Array.from(unique.values());
-
-    streams.sort((a, b) => {
-      const score = s => {
-        if (s.name.includes('4K')) return 100;
-        if (s.name.includes('2160')) return 100;
-        if (s.name.includes('1440')) return 90;
-        if (s.name.includes('1080')) return 80;
-        if (s.name.includes('720')) return 60;
-        return 10;
-      };
-      return score(b) - score(a);
-    });
-
-    return new meta.MetaResponse(url, 'movie', title, {
-      streams,
-      poster,
-      background: poster,
-      description,
-    });
+    return new meta.MetaResponse(
+      url,
+      'movie',
+      title,
+      {
+        streams,
+        poster,
+        background: poster,
+        description,
+      },
+    );
   }
 }
 
