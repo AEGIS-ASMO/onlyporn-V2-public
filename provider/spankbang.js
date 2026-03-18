@@ -44,7 +44,6 @@ class SpankbangProvider extends Provider {
 
       const html = await response.text();
 
-      // 🔥 Detect block page
       if (html.includes('SpankBang contains adult content')) {
         logger.warn('⚠️ Blocked by age/cookie wall');
       }
@@ -61,20 +60,23 @@ class SpankbangProvider extends Provider {
 
     const [keyword, order] = (genre || '').split('(');
 
+    let url;
+
     // 🔍 SEARCH + ORDER
     if (order) {
-      const searchUrl = this.handleSearch({
+      url = this.handleSearch({
         extra: { search: keyword.trim() },
       });
 
-      return searchUrl + `?o=${order.replace(')', '').toLowerCase()}`;
+      const u = new URL(url);
+      u.searchParams.set('o', order.replace(')', '').toLowerCase());
+      url = u.toString();
+    } else {
+      const path = pathMappings[keyword] || pathMappings.New;
+      url = `${this.baseUrl}${path}`;
     }
 
-    const path = pathMappings[keyword] || pathMappings.New;
-
-    let url = `${this.baseUrl}${path}`;
-
-    // 🔥 QUALITY FILTER
+    // 🔥 QUALITY FILTER (SAFE)
     if (quality) {
       const qualityMap = {
         '4k': 'uhd',
@@ -83,10 +85,15 @@ class SpankbangProvider extends Provider {
       };
 
       const q = qualityMap[quality];
+
       if (q) {
-        url += `?q=${q}`;
+        const u = new URL(url);
+        u.searchParams.set('q', q);
+        url = u.toString();
       }
     }
+
+    logger.info({ finalUrl: url }, 'catalog URL');
 
     return url;
   }
@@ -94,12 +101,10 @@ class SpankbangProvider extends Provider {
   handlePagination(url, { extra: { skip } }) {
     const page = this.page(skip);
 
-    // 🔥 Preserve query params
-    if (url.includes('?')) {
-      return `${url}&page=${page}`;
-    }
+    const u = new URL(url);
+    u.searchParams.set('page', page);
 
-    return `${url}?page=${page}`;
+    return u.toString();
   }
 
   getCatalogMetas(html) {
@@ -107,7 +112,6 @@ class SpankbangProvider extends Provider {
     const metadataList = [];
     const $ = load(html);
 
-    // 🔥 Robust selector (fixes empty catalog)
     const items = $('[data-id], .video-item, .video-list-item');
 
     items.each((index, element) => {
@@ -179,25 +183,51 @@ class SpankbangProvider extends Provider {
       .get()
       .join('\n');
 
-    // ⚠️ Old method (likely broken, kept as fallback)
+    // 🔥 Attempt old stream_data (fixed parsing)
     const regex = /stream_data\s*=\s*(\{[^;]+\})/;
-
     const match = scripts.match(regex);
 
-    if (!match) {
-      logger.warn('⚠️ No stream_data found');
-      return {};
+    let streams = [];
+
+    if (match) {
+      try {
+        let jsonString = match[1];
+
+        // Fix invalid JSON keys
+        jsonString = jsonString.replace(/(\w+):/g, '"$1":');
+
+        const streamsData = JSON.parse(jsonString);
+
+        streams = Object.entries(streamsData).map(([quality, url]) => ({
+          name: quality,
+          url,
+          type: Provider.TYPE,
+        }));
+
+      } catch (e) {
+        logger.warn({ error: e }, '⚠️ Failed to parse stream_data');
+      }
     }
 
-    const streamsData = JSON.parse(match[1]);
+    // 🔥 Fallback: extract m3u8 / mp4 directly
+    if (!streams.length) {
+      const urls = scripts.match(/https?:\/\/[^"' ]+\.(m3u8|mp4)[^"' ]*/g);
 
-    const streams = Object.entries(streamsData).map(([quality, url]) => ({
-      name: quality,
-      url,
-      type: Provider.TYPE,
-    }));
+      if (urls && urls.length) {
+        streams = urls.map((u) => ({
+          name: u.includes('m3u8') ? 'hls' : 'mp4',
+          url: u,
+          type: Provider.TYPE,
+        }));
 
-    logger.debug({ streams }, 'streams %d', streams.length);
+        logger.debug({ streams }, 'fallback streams');
+      }
+    }
+
+    if (!streams.length) {
+      logger.warn('⚠️ No streams found');
+      return {};
+    }
 
     return new meta.MetaResponse(
       url,
