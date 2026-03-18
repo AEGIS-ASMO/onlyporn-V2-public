@@ -30,15 +30,9 @@ class EpornerProvider extends Provider {
     return `${this.baseUrl}/search/${encodeURIComponent(keyword)}/`;
   }
 
-  handleGenre({ id, extra: { genre } }) {
-    if (genre.includes('/cat')) {
-      return `${this.baseUrl}${genre}`;
-    }
-    let [category, sortBy] = genre.split('(');
-    category = category.toLowerCase().trim().replace(' ', '-').trim();
-    sortBy = sortByMappings[sortBy.replace(')', '')];
-    return `${this.baseUrl}/cat/${category}${sortBy}`;
-  }
+  handleGenre() {
+  return this.baseUrl;
+}
 
   handlePagination(url, { extra: { skip } }) {
     const prefix = url.endsWith('/') ? '' : '/';
@@ -81,24 +75,6 @@ class EpornerProvider extends Provider {
     return this.fetchHtml(id).then((html) => this.parseVideoPage({ id, html }));
   }
 
-  getMetaLinks({ id, html }) {
-    const $ = load(html);
-    const $cats = $('.video-info-tags .vit-category');
-    return $cats
-      .map((_, cat) => {
-        const $cat = $(cat).children().first();
-        const href = $cat.attr('href');
-        const name = $cat.text();
-
-        return {
-          name,
-          category: 'Genres',
-          url: `stremio:///discover/${encodeURIComponent(process.env.HOST_NAME || Provider.TRANSPORT_URL)}/movie/eporner?genre=${encodeURIComponent(href)}`,
-        };
-      })
-      .toArray();
-  }
-
   parseVideoPage({ id, html }) {
     let regex = /EP.video.player.hash = '(.*)';/;
     let hash = html.match(regex);
@@ -112,7 +88,6 @@ class EpornerProvider extends Provider {
       const attribs = e.attribs;
       metaMap[attribs.name || attribs.property] = attribs.content;
     });
-    const links = this.getMetaLinks({ id, html });
 
     regex = /EP.video.player.vid = '(.*)';/;
     let videoId = html.match(regex);
@@ -128,9 +103,9 @@ class EpornerProvider extends Provider {
         description: metaMap['og:description'],
         poster: metaMap['og:image'],
         background: metaMap['og:image'],
-        genres: links.map((link) => link.name),
-        genre: links.map((link) => link.name),
-        links,
+        genres: [],
+genre: [],
+links: [],
         extra: { hash, videoId },
       }
     );
