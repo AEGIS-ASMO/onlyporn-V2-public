@@ -1,31 +1,47 @@
 const catalog = require('./spankbang.json');
 
-const genres = [
+const sortBy = [
   'All',
-  '4k',
-  '1080p',
-  '720p',
-  'milf',
-  'teen',
-  'amateur',
-  'japanese',
-  'asian',
-  'big tits',
-  'creampie'
+  'New',
+  'Trending',
+  'Popular',
+  'Featured'
 ];
 
-const sorts = ['trending', 'popular', 'new', 'featured'];
+const opt = options => ({
+  'name': 'genre',
+  options
+});
 
-const qualities = ['4k', '1080p', '720p'];
-
-catalog.extra = [
-  { name: 'search' },
-  { name: 'genre', options: genres },
-  { name: 'sort', options: sorts },
-  { name: 'quality', options: qualities },
-  { name: 'skip' }
+const genres = [
+  '4k Porn',
+  'HD 1080p',
+  'Amateur',
+  'Students',
+  'Japanese',
+  'Asian Porn',
+  'Big Tits',
+  'Teens',
+  'Family',
+  'Creampie',
+  'Small Tits',
+  'Uncategorized'
 ];
+
+const options = [
+  'New',
+  'Trending',
+  'Upcoming',
+  'Popular'
+]
+for (const genre of genres) {
+  for (const sort of sortBy) {
+    options.push(`${genre} (${sort})`);
+  }
+}
+catalog.extra.push((opt(options)));
 
 module.exports = {
+  sortBy,
   spankbangCatalogs: [catalog]
 };
