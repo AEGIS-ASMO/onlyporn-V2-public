@@ -34,33 +34,51 @@ class EpornerProvider extends Provider {
 
   if (!genre) return this.baseUrl;
 
-  // 🔥 Case 1: direct category link (/cat/xxx)
-  if (genre.startsWith('/cat/')) {
-    return `${this.baseUrl}${genre}`;
-  }
-
-  // 🔥 Case 2: encoded category (failsafe)
   try {
-    const decoded = decodeURIComponent(genre);
-    if (decoded.startsWith('/cat/')) {
-      return `${this.baseUrl}${decoded}`;
+    // decode if encoded
+    const g = decodeURIComponent(genre);
+
+    // ✅ Case 1: valid category
+    if (g.startsWith('/cat/')) {
+      return `${this.baseUrl}${g}`;
     }
-  } catch (e) {}
 
-  // 🔥 Case 3: "Anal (Most Recent)"
-  try {
-    let [category, sortBy] = genre.split('(');
+    // ✅ Case 2: sometimes already full URL
+    if (g.startsWith('http')) {
+      return g;
+    }
 
-    category = category
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, '-');
+    // ❌ Ignore invalid links (THIS PREVENTS CRASH)
+    if (
+      g.startsWith('/video') ||
+      g.startsWith('/search') ||
+      g.includes('javascript') ||
+      g === '#'
+    ) {
+      logger.warn('Skipping invalid genre link:', g);
+      return this.baseUrl;
+    }
 
-    sortBy = sortByMappings[sortBy?.replace(')', '')] || '/';
+    // ✅ Case 3: fallback "Anal (Most Recent)"
+    if (g.includes('(')) {
+      let [category, sortBy] = g.split('(');
 
-    return `${this.baseUrl}/cat/${category}${sortBy}`;
+      category = category
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-');
+
+      sortBy = sortByMappings[sortBy?.replace(')', '')] || '/';
+
+      return `${this.baseUrl}/cat/${category}${sortBy}`;
+    }
+
+    // 🛑 FINAL fallback
+    logger.warn('Unknown genre format:', g);
+    return this.baseUrl;
+
   } catch (e) {
-    logger.warn('Invalid genre format', genre);
+    logger.error('handleGenre crash:', genre, e);
     return this.baseUrl;
   }
 }
@@ -110,18 +128,22 @@ class EpornerProvider extends Provider {
     const $ = load(html);
     const $cats = $('.video-info-tags .vit-category');
     return $cats
-      .map((_, cat) => {
-        const $cat = $(cat).children().first();
-        const href = $cat.attr('href');
-        const name = $cat.text();
+  .map((_, cat) => {
+    const $cat = $(cat).children().first();
+    const href = $cat.attr('href');
+    const name = $cat.text();
 
-        return {
-          name,
-          category: 'Genres',
-          url: `stremio:///discover/${encodeURIComponent(process.env.HOST_NAME || Provider.TRANSPORT_URL)}/movie/eporner?genre=${href}`,
-        };
-      })
-      .toArray();
+    // ❌ skip invalid links
+    if (!href || !href.startsWith('/cat/')) return null;
+
+    return {
+      name,
+      category: 'Genres',
+      url: `stremio:///discover/${encodeURIComponent(process.env.HOST_NAME || Provider.TRANSPORT_URL)}/movie/eporner?genre=${href}`,
+    };
+  })
+  .toArray()
+  .filter(Boolean);
   }
 
   parseVideoPage({ id, html }) {
