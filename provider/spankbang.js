@@ -55,57 +55,56 @@ class SpankbangProvider extends Provider {
 
   // ✅ FIXED GENRE HANDLING
   handleGenre({ extra }) {
-    const { genre, quality } = extra;
 
-    let url;
+  const { genre, sort, quality } = extra;
 
-    if (!genre || genre === 'All') {
-      url = this.baseUrl + pathMappings.Trending;
-    } else {
-      const match = genre.match(/^(.+?)(?:\s*\((.+)\))?$/);
+  let url;
 
-      let keyword = match?.[1]?.trim();
-      let order = match?.[2]?.trim()?.toLowerCase();
+  const qualityMap = {
+    '4k': 'uhd',
+    '1080p': 'fhd',
+    '720p': 'hd',
+  };
 
-      const orderMap = {
-        'trending': '',
-        'popular': 'popular',
-        'new': 'new',
-        'featured': 'featured'
-      };
+  const q = qualityMap[quality];
 
-      // 🔥 GLOBAL CATEGORY (Trending/New/Popular)
-      if (pathMappings[keyword]) {
-        url = `${this.baseUrl}${pathMappings[keyword]}`;
-      } else {
-        // 🔥 SEARCH CATEGORY
-        url = `${this.baseUrl}/s/${encodeURIComponent(keyword.toLowerCase())}/`;
-      }
+  // 🎯 CASE 1: GLOBAL (no category, only quality + sort)
+  if (!genre || genre === 'All' || ['4k', '1080p', '720p'].includes(genre)) {
 
+    const path = pathMappings[
+      sort ? sort.charAt(0).toUpperCase() + sort.slice(1) : 'Trending'
+    ] || pathMappings.Trending;
+
+    url = `${this.baseUrl}${path}`;
+
+    if (q) {
       const u = new URL(url);
-
-      // SORT
-      if (order && orderMap[order]) {
-        u.searchParams.set('o', orderMap[order]);
-      }
-
-      // QUALITY
-      const qualityMap = {
-        '4k': 'uhd',
-        '1080p': 'fhd',
-        '720p': 'hd',
-      };
-
-      if (quality && qualityMap[quality]) {
-        u.searchParams.set('q', qualityMap[quality]);
-      }
-
+      u.searchParams.set('q', q);
       url = u.toString();
     }
 
-    console.log('🎯 FINAL URL:', url);
-    return url;
+  } else {
+
+    // 🎯 CASE 2: CATEGORY BASED (milf, teen, etc.)
+    url = `${this.baseUrl}/s/${encodeURIComponent(genre)}/`;
+
+    const u = new URL(url);
+
+    if (q) {
+      u.searchParams.set('q', q);
+    }
+
+    if (sort && sort !== 'trending') {
+      u.searchParams.set('o', sort);
+    }
+
+    url = u.toString();
   }
+
+  console.log('✅ FINAL GENRE URL:', url);
+
+  return url;
+}
 
   handlePagination(url, { extra: { skip } }) {
     const page = this.page(skip);
