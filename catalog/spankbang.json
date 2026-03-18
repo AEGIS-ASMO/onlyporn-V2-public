@@ -11,8 +11,10 @@
     }
   ],
   "extraSupported": [
-    "search",
-    "genre",
-    "skip"
-  ]
+  "search",
+  "genre",
+  "sort",
+  "quality",
+  "skip"
+]
 }
