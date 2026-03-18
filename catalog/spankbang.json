@@ -3,18 +3,35 @@
   "name": "OnlyPorn: SpankBang",
   "id": "spankbang",
   "extra": [
+    { "name": "search" },
     {
-      "name": "search"
+      "name": "genre",
+      "options": [
+        "All",
+        "milf",
+        "teen",
+        "amateur",
+        "japanese",
+        "asian",
+        "big tits",
+        "creampie"
+      ]
     },
     {
-      "name": "skip"
-    }
+      "name": "sort",
+      "options": ["trending", "popular", "new", "featured"]
+    },
+    {
+      "name": "quality",
+      "options": ["4k", "1080p", "720p"]
+    },
+    { "name": "skip" }
   ],
   "extraSupported": [
-  "search",
-  "genre",
-  "sort",
-  "quality",
-  "skip"
-]
+    "search",
+    "genre",
+    "sort",
+    "quality",
+    "skip"
+  ]
 }
