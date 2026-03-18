@@ -56,47 +56,65 @@ class SpankbangProvider extends Provider {
   }
 
   handleGenre({ extra }) {
-    const { genre, quality } = extra;
+  let { genre } = extra;
 
-    const [keyword, order] = (genre || '').split('(');
+  let quality;
 
-    let url;
+  // 🔥 Extract quality from genre string
+  if (genre) {
+    const g = genre.toLowerCase();
 
-    // 🔍 SEARCH + ORDER
-    if (order) {
-      url = this.handleSearch({
-        extra: { search: keyword.trim() },
-      });
-
-      const u = new URL(url);
-      u.searchParams.set('o', order.replace(')', '').toLowerCase());
-      url = u.toString();
-    } else {
-      const path = pathMappings[keyword] || pathMappings.New;
-      url = `${this.baseUrl}${path}`;
-    }
-
-    // 🔥 QUALITY FILTER (SAFE)
-    if (quality) {
-      const qualityMap = {
-        '4k': 'uhd',
-        '1080p': 'fhd',
-        '720p': 'hd',
-      };
-
-      const q = qualityMap[quality];
-
-      if (q) {
-        const u = new URL(url);
-        u.searchParams.set('q', q);
-        url = u.toString();
-      }
-    }
-
-    logger.info({ finalUrl: url }, 'catalog URL');
-
-    return url;
+    if (g.includes('4k')) quality = '4k';
+    else if (g.includes('1080')) quality = '1080p';
+    else if (g.includes('720')) quality = '720p';
   }
+
+  const [keywordRaw, order] = (genre || '').split('(');
+
+  // 🔥 Clean keyword (remove quality words)
+  let keyword = (keywordRaw || '')
+    .replace(/4k porn|hd 1080p|720p/gi, '')
+    .trim();
+
+  let url;
+
+  // 🔍 SEARCH + ORDER
+  if (order) {
+    url = this.handleSearch({
+      extra: { search: keyword || '' },
+    });
+
+    const u = new URL(url);
+    u.searchParams.set('o', order.replace(')', '').toLowerCase());
+    url = u.toString();
+  } else {
+    const path = pathMappings[keyword] || pathMappings.New;
+    url = `${this.baseUrl}${path}`;
+  }
+
+  // 🔥 APPLY QUALITY FILTER (NOW WORKS PROPERLY)
+  if (quality) {
+    const qualityMap = {
+      '4k': 'uhd',
+      '1080p': 'fhd',
+      '720p': 'hd',
+    };
+
+    const q = qualityMap[quality];
+
+    if (q) {
+      const u = new URL(url);
+      u.searchParams.set('q', q);
+      url = u.toString();
+    }
+  }
+
+  console.log('FINAL URL:', url); // 🔥 guaranteed debug output
+
+  logger.info({ finalUrl: url }, 'catalog URL');
+
+  return url;
+}
 
   handlePagination(url, { extra: { skip } }) {
     const page = this.page(skip);
