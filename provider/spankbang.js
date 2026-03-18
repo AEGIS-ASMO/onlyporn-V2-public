@@ -219,8 +219,38 @@ items.each((index, element) => {
       .join('\n');
 
     let streams = [];
+// 🔥 EXTRACT REAL VIDEO FILES (4K SOURCE)
+const fileMatches = scripts.match(/"(\d{3,4}p|4k)"\s*:\s*"([^"]+)"/gi);
 
-const jsonMatch = scripts.match(/window\.__data\s*=\s*(\{.*?\});/);
+if (fileMatches) {
+  const added = new Set();
+
+  fileMatches.forEach(entry => {
+    const match = entry.match(/"(\d{3,4}p|4k)"\s*:\s*"([^"]+)"/i);
+    if (!match) return;
+
+    const quality = match[1].toLowerCase();
+    const url = match[2];
+
+    if (!url || added.has(url)) return;
+    added.add(url);
+
+    let name = quality.toUpperCase();
+
+    if (quality === '4k') name = '🔥 4K';
+    if (quality === '2160p') name = '🔥 4K';
+
+    streams.push({
+      name,
+      url,
+      type: 'mp4'
+    });
+  });
+
+  logger.info({ streams }, '🎯 MP4 QUALITY FOUND');
+}
+
+const jsonMatch = scripts.match(/window\.__data\s*=\s*(\{[\s\S]*?\});/);
 
 if (jsonMatch) {
   try {
@@ -257,11 +287,11 @@ if (jsonMatch) {
           const cached = hlsCache.get(masterUrl);
           if (Date.now() - cached.time < CACHE_TTL) {
             console.log('⚡ CACHE HIT');
-            streams = cached.streams;
+            streams = [...streams, ...cached.streams];
           }
         }
 
-        if (!streams.length) {
+        // Always fetch HLS (for fallback qualities)
 
           const res = await fetch(masterUrl, {
   headers: {
@@ -325,6 +355,28 @@ if (!height || !streamUrl) continue;
   else if (v.isHDR) name += ' HDR';
 
   if (v.bitrate > 10000000) name += ' High Bitrate';
+// 🔥 REMOVE DUPLICATES
+const unique = new Map();
+
+streams.forEach(s => {
+  if (!s.url) return;
+  unique.set(s.url, s);
+});
+
+streams = Array.from(unique.values());
+
+// 🔥 SORT BEST FIRST
+streams.sort((a, b) => {
+  const score = s => {
+    if (s.name.includes('4K')) return 100;
+    if (s.name.includes('2160')) return 100;
+    if (s.name.includes('1440')) return 90;
+    if (s.name.includes('1080')) return 80;
+    if (s.name.includes('720')) return 60;
+    return 10;
+  };
+  return score(b) - score(a);
+});
 
   return {
     name,
