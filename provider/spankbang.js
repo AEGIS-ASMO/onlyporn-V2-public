@@ -220,6 +220,31 @@ items.each((index, element) => {
 
     let streams = [];
 
+const jsonMatch = scripts.match(/window\.__data\s*=\s*(\{.*?\});/);
+
+if (jsonMatch) {
+  try {
+    const data = JSON.parse(jsonMatch[1]);
+
+    const files = data?.video?.files || {};
+
+    Object.entries(files).forEach(([quality, url]) => {
+      if (!url) return;
+
+      streams.push({
+        name: quality.toUpperCase(), // 4k, 1080p etc
+        url,
+        type: 'mp4'
+      });
+    });
+
+    console.log('🔥 MP4 FILES:', files);
+
+  } catch (e) {
+    console.log('JSON parse failed');
+  }
+}
+
     // 🔥 HLS PARSER WITH CACHE
     const m3u8Match = scripts.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
 
@@ -238,7 +263,12 @@ items.each((index, element) => {
 
         if (!streams.length) {
 
-          const res = await fetch(masterUrl);
+          const res = await fetch(masterUrl, {
+  headers: {
+    'referer': 'https://spankbang.com/',
+    'user-agent': 'Mozilla/5.0'
+  }
+});
           const text = await res.text();
 
           const lines = text.split('\n');
@@ -261,9 +291,8 @@ items.each((index, element) => {
 
               let streamUrl = new URL(next, masterUrl).toString();
 
-              if (height >= 2000 && bitrate < 8000000) {
-                continue; // 🚫 skip fake 4K
-              }
+              // Only skip truly broken entries
+if (!height || !streamUrl) continue;
 
               let name = `${height || 'Auto'}p`;
 
@@ -289,10 +318,13 @@ items.each((index, element) => {
           streams = variants.map(v => {
   let name = `${v.height}p`;
 
-  if (v.isDV) name += ' DV';
+  if (v.height >= 2160) name = '4K';
+  else if (v.height >= 1440) name = '1440p';
+
+  if (v.isDV) name += ' Dolby Vision';
   else if (v.isHDR) name += ' HDR';
 
-  name += ` ${v.bitrate > 15000000 ? 'High' : ''}`;
+  if (v.bitrate > 10000000) name += ' High Bitrate';
 
   return {
     name,
@@ -300,6 +332,7 @@ items.each((index, element) => {
     type: 'hls'
   };
 });
+console.log('🎬 VARIANTS:', variants);
 
           hlsCache.set(masterUrl, {
             streams,
