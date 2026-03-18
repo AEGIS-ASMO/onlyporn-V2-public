@@ -94,12 +94,28 @@ class SpankbangProvider extends Provider {
       u.searchParams.set('q', q);
     }
 
-    if (sort && sort !== 'trending') {
-      u.searchParams.set('o', sort);
-    }
+    const sortMap = {
+  'trending': '',
+  'popular': 'views',
+  'new': 'new',
+  'featured': 'featured'
+};
+
+if (sort) {
+  const mapped = sortMap[sort.toLowerCase()];
+  if (mapped) {
+    u.searchParams.set('o', mapped);
+  }
+}
 
     url = u.toString();
   }
+
+// 🔥 FORCE REFRESH (prevents identical ordering / caching)
+const finalUrl = new URL(url);
+finalUrl.searchParams.set('_', Date.now());
+
+url = finalUrl.toString();
 
   console.log('✅ FINAL GENRE URL:', url);
 
@@ -115,60 +131,64 @@ class SpankbangProvider extends Provider {
 
   // ✅ FIXED THUMBNAILS
   getCatalogMetas(html) {
+    const metadataList = [];
+    const $ = load(html);
 
-  const metadataList = [];
-  const $ = load(html);
+    const items = $('[data-id], .video-item, .video-list-item');
 
-  // ✅ TARGET ONLY MAIN GRID (CRITICAL FIX)
-  const items = $('.video-list .video-item, .results .video-item');
+    const seen = new Set();
 
-  const seen = new Set(); // 🚫 remove duplicates
+items.each((index, element) => {
+  const $e = $(element);
 
-  items.each((index, element) => {
+  const link = $e.find('a').attr('href');
 
-    const $e = $(element);
+  if (!link || seen.has(link)) return;
+  seen.add(link);
 
-    const link = $e.find('a').attr('href');
-    const img = $e.find('img');
+  const img = $e.find('img');
 
-    if (!link || seen.has(link)) return;
+      let poster =
+        img.attr('data-src') ||
+        img.attr('data-preview') ||
+        img.attr('src');
 
-    seen.add(link);
+      // 🔥 SRCSET (BEST QUALITY)
+      const srcset = img.attr('data-srcset') || img.attr('srcset');
+      if (srcset) {
+        const parts = srcset.split(',');
+        const best = parts[parts.length - 1]?.trim().split(' ')[0];
+        if (best) poster = best;
+      }
 
-    // 🔥 HIGH QUALITY THUMBNAIL FIX
-    let poster =
-      img.attr('data-src') ||
-      img.attr('data-original') ||
-      img.attr('src');
+      // 🔥 FORCE HIGH RES
+      if (poster) {
+        poster = poster
+          .replace(/\/small\//, '/large/')
+          .replace(/\/medium\//, '/large/')
+          .replace(/\/thumbs\//, '/thumbs/large/');
+      }
 
-    if (poster) {
-      poster = poster.replace(/-\d+x\d+\./, '-640x360.'); // force HD thumb
-    }
+      const title =
+        img.attr('alt') ||
+        $e.find('.n').text() ||
+        $e.find('a').attr('title');
 
-    const title =
-      img.attr('alt') ||
-      $e.find('.n').text().trim() ||
-      $e.find('a').attr('title');
+      if (!link || !title) return;
 
-    if (!title) return;
+      metadataList.push(
+        new meta.MetaPreview(
+          this.baseUrl + link,
+          'movie',
+          title,
+          poster,
+          { videoPageUrl: this.baseUrl + link },
+        ),
+      );
+    });
 
-    const videoPageUrl = this.baseUrl + link;
-
-    metadataList.push(
-      new meta.MetaPreview(
-        videoPageUrl,
-        'movie',
-        title,
-        poster,
-        { videoPageUrl },
-      ),
-    );
-  });
-
-  logger.info({ count: metadataList.length }, '✅ CLEAN catalog parsed');
-
-  return metadataList;
-}
+    return metadataList;
+  }
 
   async getMetadata(args) {
     const { id } = args;
