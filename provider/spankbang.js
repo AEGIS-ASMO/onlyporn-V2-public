@@ -286,14 +286,20 @@ items.each((index, element) => {
 
           variants.sort((a, b) => b.height - a.height || b.bitrate - a.bitrate);
 
-          // 🎯 BEST ONLY
-          streams = variants.length
-            ? [{
-                name: '🔥 Best Quality',
-                url: variants[0].url,
-                type: Provider.TYPE
-              }]
-            : [];
+          streams = variants.map(v => {
+  let name = `${v.height}p`;
+
+  if (v.isDV) name += ' DV';
+  else if (v.isHDR) name += ' HDR';
+
+  name += ` ${v.bitrate > 15000000 ? 'High' : ''}`;
+
+  return {
+    name,
+    url: v.url,
+    type: 'hls'
+  };
+});
 
           hlsCache.set(masterUrl, {
             streams,
