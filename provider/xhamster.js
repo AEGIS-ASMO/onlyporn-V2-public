@@ -101,7 +101,7 @@ if (!page || page === '1') return url;
             v.pageURL,
             'movie',
             v.title,
-            v.thumbURL,
+            v.imageURL || v.thumbURL,
             { videoPageUrl: v.pageURL }
           )
         );
