@@ -27,7 +27,6 @@ class EpornerProvider extends Provider {
   }
 
   handleGenre({ id, extra }) {
-
   const genre = extra?.genre;
 
   // 🛑 HARD GUARD
@@ -47,7 +46,7 @@ class EpornerProvider extends Provider {
   // 🛑 Reject garbage early
   if (
     !g ||
-    g.length > 100 ||   // prevent weird payloads
+    g.length > 100 ||
     g.includes('undefined') ||
     g.includes('null')
   ) {
@@ -56,13 +55,12 @@ class EpornerProvider extends Provider {
   }
 
   // ✅ ONLY allow valid category links (with normalization)
-if (g.startsWith('/cat/')) {
-  const clean = g.split('?')[0].split('#')[0]; // remove junk
-  return `${this.baseUrl}${clean.replace(/\/+$/, '')}/`;
-}
+  if (g.startsWith('/cat/')) {
+    const clean = g.split('?')[0].split('#')[0];
+    return `${this.baseUrl}${clean.replace(/\/+$/, '')}/`;
   }
 
-  // ❌ BLOCK EVERYTHING ELSE (THIS IS KEY)
+  // ❌ BLOCK EVERYTHING ELSE (THIS MUST BE INSIDE)
   logger.warn('Blocked non-category genre:', g);
   return this.baseUrl;
 }
