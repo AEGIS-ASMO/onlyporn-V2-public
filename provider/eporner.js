@@ -215,8 +215,16 @@ class EpornerProvider extends Provider {
 
 selectSources(sources) {
   if (sources.hls) {
-    return super.getStreams({ videoPageUrl: sources.hls.auto.src });
-  }
+  return {
+    streams: Object.entries(sources.hls)
+      .filter(([k, v]) => v?.src)
+      .map(([quality, v]) => ({
+        url: v.src,
+        name: `HLS ${quality}`,
+        type: Provider.TYPE,
+      })),
+  };
+}
 
   if (sources.mp4) {
     const streams = Object.values(sources.mp4).map((mp4) => ({
