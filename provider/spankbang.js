@@ -115,58 +115,60 @@ class SpankbangProvider extends Provider {
 
   // ✅ FIXED THUMBNAILS
   getCatalogMetas(html) {
-    const metadataList = [];
-    const $ = load(html);
 
-    const items = $('[data-id], .video-item, .video-list-item');
+  const metadataList = [];
+  const $ = load(html);
 
-    items.each((index, element) => {
-      const $e = $(element);
+  // ✅ TARGET ONLY MAIN GRID (CRITICAL FIX)
+  const items = $('.video-list .video-item, .results .video-item');
 
-      const link = $e.find('a').attr('href');
-      const img = $e.find('img');
+  const seen = new Set(); // 🚫 remove duplicates
 
-      let poster =
-        img.attr('data-src') ||
-        img.attr('data-preview') ||
-        img.attr('src');
+  items.each((index, element) => {
 
-      // 🔥 SRCSET (BEST QUALITY)
-      const srcset = img.attr('data-srcset') || img.attr('srcset');
-      if (srcset) {
-        const parts = srcset.split(',');
-        const best = parts[parts.length - 1]?.trim().split(' ')[0];
-        if (best) poster = best;
-      }
+    const $e = $(element);
 
-      // 🔥 FORCE HIGH RES
-      if (poster) {
-        poster = poster
-          .replace(/\/small\//, '/large/')
-          .replace(/\/medium\//, '/large/')
-          .replace(/\/thumbs\//, '/thumbs/large/');
-      }
+    const link = $e.find('a').attr('href');
+    const img = $e.find('img');
 
-      const title =
-        img.attr('alt') ||
-        $e.find('.n').text() ||
-        $e.find('a').attr('title');
+    if (!link || seen.has(link)) return;
 
-      if (!link || !title) return;
+    seen.add(link);
 
-      metadataList.push(
-        new meta.MetaPreview(
-          this.baseUrl + link,
-          'movie',
-          title,
-          poster,
-          { videoPageUrl: this.baseUrl + link },
-        ),
-      );
-    });
+    // 🔥 HIGH QUALITY THUMBNAIL FIX
+    let poster =
+      img.attr('data-src') ||
+      img.attr('data-original') ||
+      img.attr('src');
 
-    return metadataList;
-  }
+    if (poster) {
+      poster = poster.replace(/-\d+x\d+\./, '-640x360.'); // force HD thumb
+    }
+
+    const title =
+      img.attr('alt') ||
+      $e.find('.n').text().trim() ||
+      $e.find('a').attr('title');
+
+    if (!title) return;
+
+    const videoPageUrl = this.baseUrl + link;
+
+    metadataList.push(
+      new meta.MetaPreview(
+        videoPageUrl,
+        'movie',
+        title,
+        poster,
+        { videoPageUrl },
+      ),
+    );
+  });
+
+  logger.info({ count: metadataList.length }, '✅ CLEAN catalog parsed');
+
+  return metadataList;
+}
 
   async getMetadata(args) {
     const { id } = args;
