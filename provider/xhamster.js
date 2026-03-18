@@ -37,16 +37,32 @@ class XhamsterProvider extends Provider {
 
   handleGenre({ id, extra: { genre } }) {
 
-    let path = '';
+  let path = '';
 
-    if (id.includes('4k')) {
-      path += '/4k';
-    }
+  // ✅ keep 4k support
+  if (id.includes('4k')) {
+    path += '/4k';
+  }
 
+  // ✅ EXISTING: Best filters
+  if (pathMappings[genre]) {
     path += pathMappings[genre];
-
     return this.baseUrl + path;
   }
+
+  // 🔥 NEW: categories support
+  if (genre) {
+    const slug = genre
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/&/g, '')       // "Old & Young" → "old-young"
+      .replace(/[^a-z0-9-]/g, ''); // safety cleanup
+
+    return `${this.baseUrl}${path}/categories/${slug}`;
+  }
+
+  return this.getInitialUrl(id);
+}
 
   handlePagination(url, { extra: { skip } }) {
   const page = this.page(skip);
