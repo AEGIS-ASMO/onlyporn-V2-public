@@ -1,165 +1,216 @@
-require('dotenv').config();
 const { load } = require('cheerio');
 const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
-const sortByMappings = {
-  'Most Recent': '/',
-  'Weekly Top': '/SORT-top-weekly/',
-  'Monthly Top': '/SORT-top-monthly/',
-  'Most Viewed': '/SORT-most-viewed/',
-  'Top Rated': '/SORT-top-rated/',
-  Longest: '/SORT-longest/',
+const pathMappings = {
+  'Trending': '/trending_videos/',
+  'New': '/new_videos/',
+  'Popular': '/most_popular/',
+  'Upcoming': '/upcoming/',
 };
 
-class EpornerProvider extends Provider {
+class SpankbangProvider extends Provider {
+
   constructor() {
-    super('https://www.eporner.com', 'eporner', 60);
+    super('https://spankbang.com', 'spankbang', 80);
   }
 
   static create() {
-    return new EpornerProvider();
+    return new SpankbangProvider();
   }
 
-  getInitialUrl(catalogId) {
-    return this.baseUrl;
+  getInitialUrl() {
+    return this.baseUrl + pathMappings.Trending;
   }
 
   handleSearch({ extra: { search: keyword } }) {
-    return `${this.baseUrl}/search/${encodeURIComponent(keyword)}/`;
+    return `${this.baseUrl}/s/${encodeURIComponent(keyword)}/`;
   }
 
-  handleGenre() {
-  return this.baseUrl;
-}
+  async fetchHtml(url) {
+    logger.info({ url }, 'fetching url');
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'accept': 'text/html',
+          'accept-language': 'en-US,en;q=0.9',
+          'referer': 'https://spankbang.com/',
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+        },
+      });
+
+      const html = await response.text();
+
+      // 🔥 Detect block page
+      if (html.includes('SpankBang contains adult content')) {
+        logger.warn('⚠️ Blocked by age/cookie wall');
+      }
+
+      return html;
+    } catch (error) {
+      logger.error(error);
+      return '';
+    }
+  }
+
+  handleGenre({ extra }) {
+    const { genre, quality } = extra;
+
+    const [keyword, order] = (genre || '').split('(');
+
+    // 🔍 SEARCH + ORDER
+    if (order) {
+      const searchUrl = this.handleSearch({
+        extra: { search: keyword.trim() },
+      });
+
+      return searchUrl + `?o=${order.replace(')', '').toLowerCase()}`;
+    }
+
+    const path = pathMappings[keyword] || pathMappings.New;
+
+    let url = `${this.baseUrl}${path}`;
+
+    // 🔥 QUALITY FILTER
+    if (quality) {
+      const qualityMap = {
+        '4k': 'uhd',
+        '1080p': 'fhd',
+        '720p': 'hd',
+      };
+
+      const q = qualityMap[quality];
+      if (q) {
+        url += `?q=${q}`;
+      }
+    }
+
+    return url;
+  }
 
   handlePagination(url, { extra: { skip } }) {
-    const prefix = url.endsWith('/') ? '' : '/';
-    return `${prefix}${this.page(skip)}/`;
+    const page = this.page(skip);
+
+    // 🔥 Preserve query params
+    if (url.includes('?')) {
+      return `${url}&page=${page}`;
+    }
+
+    return `${url}?page=${page}`;
   }
 
   getCatalogMetas(html) {
+
     const metadataList = [];
     const $ = load(html);
 
-    $('div.mb').each((_, element) => {
-      const $e = $(element).children('.mbimg').first();
-      const $a = $e.children('.mbcontent').children().first();
-      const $img = $a.children('img').first();
-      const poster = $img.attr('data-src') || $img.attr('src');
-      const title = $img.attr('alt');
-      const videoPageUrl = $a.attr('href');
+    // 🔥 Robust selector (fixes empty catalog)
+    const items = $('[data-id], .video-item, .video-list-item');
 
-      if (videoPageUrl) {
-        metadataList.push(
-          new meta.MetaPreview(
-            this.baseUrl + videoPageUrl,
-            'movie',
-            title,
-            poster,
-            {
-              videoPageUrl,
-            }
-          )
-        );
-      }
+    items.each((index, element) => {
+
+      const $e = $(element);
+
+      const link = $e.find('a').attr('href');
+      const img = $e.find('img');
+
+      const poster =
+        img.attr('data-src') ||
+        img.attr('data-preview') ||
+        img.attr('src');
+
+      const title =
+        img.attr('alt') ||
+        $e.find('.n').text() ||
+        $e.find('a').attr('title');
+
+      if (!link || !title) return;
+
+      const videoPageUrl = this.baseUrl + link;
+
+      metadataList.push(
+        new meta.MetaPreview(
+          videoPageUrl,
+          'movie',
+          title,
+          poster,
+          { videoPageUrl },
+        ),
+      );
     });
+
+    logger.debug({ count: metadataList.length }, 'catalog items parsed');
 
     return metadataList;
   }
 
   async getMetadata(args) {
+
     logger.debug({ args }, 'getMetadata');
+
     const { id } = args;
-    return this.fetchHtml(id).then((html) => this.parseVideoPage({ id, html }));
-  }
 
-  parseVideoPage({ id, html }) {
-    let regex = /EP.video.player.hash = '(.*)';/;
-    let hash = html.match(regex);
-    if (hash && hash[1]) {
-      hash = hash[1];
-    }
-    const $ = load(html);
-    const $metas = $('meta');
-    let metaMap = {};
-    $metas.each((i, e) => {
-      const attribs = e.attribs;
-      metaMap[attribs.name || attribs.property] = attribs.content;
-    });
-
-    regex = /EP.video.player.vid = '(.*)';/;
-    let videoId = html.match(regex);
-    if (videoId && videoId[1]) {
-      videoId = videoId[1];
-    }
-
-    return new meta.MetaResponse(
-      id,
-      Provider.TYPE,
-      metaMap['og:title'],
-      {
-        description: metaMap['og:description'],
-        poster: metaMap['og:image'],
-        background: metaMap['og:image'],
-        genres: [],
-genre: [],
-links: [],
-        extra: { hash, videoId },
-      }
-    );
-  }
-
-  hash(a) {
-    return (
-      parseInt(a.substring(0, 8), 16).toString(36) +
-      parseInt(a.substring(8, 16), 16).toString(36) +
-      parseInt(a.substring(16, 24), 16).toString(36) +
-      parseInt(a.substring(24, 32), 16).toString(36)
-    );
-  }
-
-  async processStreams({ id }) {
     return this.fetchHtml(id)
-      .then((html) => this.parseVideoPage({ id, html }))
-      .then((meta) => this.getStreams(meta));
+      .then(html => this.parseVideoPage({ id, html }))
+      .catch((error) => {
+        logger.error({ error, args }, 'getMetadata error');
+        throw error;
+      });
   }
 
-  getStreams(meta) {
-  const { hash, videoId } = meta.extra;
+  parseVideoPage({ html }) {
 
-  const getVideoId = (id) => {
-    const i = id.indexOf('video-') + 6;
-    const j = id.indexOf('/', i);
-    return id.substring(i, j);
-  };
+    const $ = load(html);
 
-  const url = `https://www.eporner.com/xhr/video/${videoId || getVideoId(meta.id)}?hash=${this.hash(hash)}&domain=www.eporner.com&pixelRatio=2&playerWidth=0&playerHeight=0&fallback=false&embed=false&supportedFormats=hls,dash,h265,vp9,av1,mp4`;
+    const url = $('meta[property="og:url"]').attr('content');
 
-  return this.fetchHtml(url).then((res) => {
-    const data = typeof res === "string" ? JSON.parse(res) : res;
-    return this.selectSources(data.sources);
-  });
-}
+    const title = $('meta[property="og:title"]').attr('content');
 
-selectSources(sources) {
-  if (sources.hls) {
-    return super.getStreams({ videoPageUrl: sources.hls.auto.src });
-  }
+    const poster = $('meta[property="og:image"]').attr('content');
 
-  if (sources.mp4) {
-    const streams = Object.values(sources.mp4).map((mp4) => ({
-      url: mp4.src,
-      name: mp4.labelShort,
+    const description =
+      $('meta[property="og:description"]').attr('content') || title;
+
+    const scripts = $('script')
+      .map((i, el) => $(el).html())
+      .get()
+      .join('\n');
+
+    // ⚠️ Old method (likely broken, kept as fallback)
+    const regex = /stream_data\s*=\s*(\{[^;]+\})/;
+
+    const match = scripts.match(regex);
+
+    if (!match) {
+      logger.warn('⚠️ No stream_data found');
+      return {};
+    }
+
+    const streamsData = JSON.parse(match[1]);
+
+    const streams = Object.entries(streamsData).map(([quality, url]) => ({
+      name: quality,
+      url,
       type: Provider.TYPE,
     }));
 
-    return { streams };
+    logger.debug({ streams }, 'streams %d', streams.length);
+
+    return new meta.MetaResponse(
+      url,
+      'movie',
+      title,
+      {
+        streams,
+        poster,
+        background: poster,
+        description,
+      },
+    );
   }
-
-  return { streams: [] };
-}
 }
 
-module.exports = EpornerProvider.create;
+module.exports = SpankbangProvider.create;
