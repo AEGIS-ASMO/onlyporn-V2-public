@@ -39,20 +39,22 @@ class EpornerProvider extends Provider {
     genre = decodeURIComponent(genre);
   } catch (e) {}
 
-  // ✅ direct category link from tags
+  // ✅ direct category from tags
   if (typeof genre === 'string' && genre.startsWith('/cat/')) {
     return `${this.baseUrl}${genre}`;
   }
 
-  // ✅ normal UI genre
+  // ✅ UI genre handling
   let [category, sortBy] = genre.split('(');
 
   category = category
     ?.toLowerCase()
     .trim()
-    .replace(/\s+/g, '-');
+    .replace(/\s+/g, '-'); // 🔥 FIXED
 
   sortBy = sortByMappings[sortBy?.replace(')', '')] || '/';
+
+  if (!category) return this.getInitialUrl(id);
 
   return `${this.baseUrl}/cat/${category}${sortBy}`;
 }
@@ -104,7 +106,7 @@ class EpornerProvider extends Provider {
       let href = $cat.attr('href');
       const name = $cat.text()?.trim();
 
-      // 🚫 skip invalid
+      // 🚫 BLOCK BAD LINKS
       if (!href || !href.startsWith('/cat/') || !name) return null;
 
       return {
