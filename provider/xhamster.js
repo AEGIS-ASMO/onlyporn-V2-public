@@ -71,75 +71,107 @@ if (!page || page === '1') return url;
 }
 
   getCatalogMetas(html) {
-if (!html || html.length < 1000) {
-  return [];
+  if (!html || html.length < 1000) {
+    return [];
+  }
+
+  const metadataList = [];
+
+  /* =========================
+     🔥 1. TRY JSON FIRST
+  ========================= */
+  const match = html.match(/window\.initials\s*=\s*(\{.*?\});/s);
+
+  if (match) {
+    try {
+      const json = JSON.parse(match[1]);
+
+      const videos =
+        json?.layoutPage?.videoListProps?.videoThumbProps || [];
+
+      for (let i = 0; i < videos.length; i++) {
+        if (metadataList.length >= this.limit) break;
+
+        const v = videos[i];
+
+        if (!v?.pageURL || !v?.title || !v?.thumbURL) continue;
+
+        metadataList.push(
+          new meta.MetaPreview(
+            v.pageURL,
+            'movie',
+            v.title,
+            v.thumbURL,
+            { videoPageUrl: v.pageURL }
+          )
+        );
+      }
+
+      if (metadataList.length > 0) {
+        return metadataList; // ✅ SUCCESS (fast path)
+      }
+
+    } catch (e) {
+      logger.error('JSON parse failed', e);
+    }
+  }
+
+  /* =========================
+     🧱 2. FALLBACK (your old DOM)
+  ========================= */
+
+  const $ = load(html);
+  let count = 0;
+
+  $('.thumb-list__item').each((_, element) => {
+    if (count >= this.limit) return false;
+
+    const $e = $(element);
+    const $a = $e.find('a').first();
+
+    let videoPageUrl = $a.attr('href');
+
+    if (videoPageUrl && videoPageUrl.includes('/ff/out')) return;
+
+    const $img = $a.find('img').first();
+
+    let poster =
+      $img.attr('data-src') ||
+      $img.attr('data-original') ||
+      $img.attr('data-preview') ||
+      $img.attr('src');
+
+    if (!poster || poster.startsWith('data:')) return;
+
+    if (!poster.startsWith('http')) {
+      poster = this.baseUrl + poster;
+    }
+
+    if (videoPageUrl && !videoPageUrl.startsWith('http')) {
+      videoPageUrl = this.baseUrl + videoPageUrl;
+    }
+
+    const title =
+      $img.attr('alt') ||
+      $a.attr('title');
+
+    if (!videoPageUrl || !title) return;
+
+    metadataList.push(
+      new meta.MetaPreview(
+        videoPageUrl,
+        'movie',
+        title,
+        poster,
+        { videoPageUrl },
+      ),
+    );
+
+    count++;
+  });
+
+  return metadataList;
 }
-
-    const metadataList = [];
-
-    const $ = load(html);
-
-   let count = 0;
-
-$('.thumb-list__item').each((_, element) => {
-
-  if (count >= this.limit) return false; // 🛑 STOP LOOP
-
-  const $e = $(element);
-  const $a = $e.find('a').first();
-
-  let videoPageUrl = $a.attr('href');
-
-  // 🚫 skip ads early
-  if (videoPageUrl && videoPageUrl.includes('/ff/out')) return;
-
-  const $img = $a.find('img').first();
-
-  const srcset = $img.attr('data-srcset');
-  const bestSrc =
-    srcset?.split(',').pop()?.trim().split(' ')[0];
-
-  // 🔥 get ALL possible sources (xhamster lazy load fix)
-let poster =
-  $img.attr('data-src') ||
-  $img.attr('data-original') ||
-  $img.attr('data-preview') ||
-  bestSrc ||
-  $img.attr('src');
-
-// 🚫 if still no usable poster → skip
-if (!poster || poster.startsWith('data:')) return;
-
-  // 🔁 force absolute URL
-  if (!poster.startsWith('http')) {
-    poster = this.baseUrl + poster;
-  }
-
-  if (videoPageUrl && !videoPageUrl.startsWith('http')) {
-    videoPageUrl = this.baseUrl + videoPageUrl;
-  }
-
-  const title =
-    $img.attr('alt') ||
-    $a.attr('title');
-
-  if (!videoPageUrl || !title) return;
-
-  metadataList.push(
-    new meta.MetaPreview(
-      videoPageUrl,
-      'movie',
-      title,
-      poster,
-      { videoPageUrl },
-    ),
-  );
-
-  count++; // ✅ increment only when valid
-});
-
-    return metadataList;
-  }
 
   async getMetadata(args) {
 
