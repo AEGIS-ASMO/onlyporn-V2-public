@@ -4,249 +4,243 @@ const { meta } = require('../model');
 const Provider = require('./provider');
 
 const pathMappings = {
-'Trending': '/trending_videos/',
-'New': '/new_videos/',
-'Popular': '/most_popular/',
-'Upcoming': '/upcoming/',
+  'Trending': '/trending_videos/',
+  'New': '/new_videos/',
+  'Popular': '/most_popular/',
+  'Upcoming': '/upcoming/',
 };
 
 class SpankbangProvider extends Provider {
 
-constructor() {
-super('https://spankbang.com', 'spankbang', 80);
-}
+  constructor() {
+    super('https://spankbang.com', 'spankbang', 80);
+  }
 
-static create() {
-return new SpankbangProvider();
-}
+  static create() {
+    return new SpankbangProvider();
+  }
 
-getInitialUrl() {
-return this.baseUrl + pathMappings.Trending;
-}
+  getInitialUrl() {
+    return this.baseUrl + pathMappings.Trending;
+  }
 
-handleSearch({ extra: { search: keyword } }) {
-return ${this.baseUrl}/s/${encodeURIComponent(keyword)}/;
-}
+  handleSearch({ extra: { search: keyword } }) {
+    return `${this.baseUrl}/s/${encodeURIComponent(keyword)}/`;
+  }
 
-async fetchHtml(url) {
-logger.info({ url }, 'fetching url');
+  async fetchHtml(url) {
+    logger.info({ url }, 'fetching url');
 
-try {  
-  const response = await fetch(url, {  
-    headers: {  
-      'accept': 'text/html',  
-      'accept-language': 'en-US,en;q=0.9',  
-      'referer': 'https://spankbang.com/',  
-      'user-agent':  
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',  
-    },  
-  });  
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'accept': 'text/html',
+          'accept-language': 'en-US,en;q=0.9',
+          'referer': 'https://spankbang.com/',
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+        },
+      });
 
-  const html = await response.text();  
+      const html = await response.text();
 
-  if (html.includes('SpankBang contains adult content')) {  
-    logger.warn('⚠️ Blocked by age/cookie wall');  
-  }  
+      if (html.includes('SpankBang contains adult content')) {
+        logger.warn('⚠️ Blocked by age/cookie wall');
+      }
 
-  return html;  
-} catch (error) {  
-  logger.error(error);  
-  return '';  
-}
+      return html;
+    } catch (error) {
+      logger.error(error);
+      return '';
+    }
+  }
 
-}
+  handleGenre({ extra }) {
+    const { genre, quality } = extra;
 
-handleGenre({ extra }) {
-const { genre, quality } = extra;
+    const [keyword, order] = (genre || '').split('(');
 
-const [keyword, order] = (genre || '').split('(');  
+    let url;
 
-let url;  
+    // 🔍 SEARCH + ORDER
+    if (order) {
+      url = this.handleSearch({
+        extra: { search: keyword.trim() },
+      });
 
-// 🔍 SEARCH + ORDER  
-if (order) {  
-  url = this.handleSearch({  
-    extra: { search: keyword.trim() },  
-  });  
+      const u = new URL(url);
+      u.searchParams.set('o', order.replace(')', '').toLowerCase());
+      url = u.toString();
+    } else {
+      const path = pathMappings[keyword] || pathMappings.New;
+      url = `${this.baseUrl}${path}`;
+    }
 
-  const u = new URL(url);  
-  u.searchParams.set('o', order.replace(')', '').toLowerCase());  
-  url = u.toString();  
-} else {  
-  const path = pathMappings[keyword] || pathMappings.New;  
-  url = `${this.baseUrl}${path}`;  
-}  
+    // 🔥 QUALITY FILTER (SAFE)
+    if (quality) {
+      const qualityMap = {
+        '4k': 'uhd',
+        '1080p': 'fhd',
+        '720p': 'hd',
+      };
 
-// 🔥 QUALITY FILTER (SAFE)  
-if (quality) {  
-  const qualityMap = {  
-    '4k': 'uhd',  
-    '1080p': 'fhd',  
-    '720p': 'hd',  
-  };  
+      const q = qualityMap[quality];
 
-  const q = qualityMap[quality];  
+      if (q) {
+        const u = new URL(url);
+        u.searchParams.set('q', q);
+        url = u.toString();
+      }
+    }
 
-  if (q) {  
-    const u = new URL(url);  
-    u.searchParams.set('q', q);  
-    url = u.toString();  
-  }  
-}  
+    logger.info({ finalUrl: url }, 'catalog URL');
 
-logger.info({ finalUrl: url }, 'catalog URL');  
+    return url;
+  }
 
-return url;
+  handlePagination(url, { extra: { skip } }) {
+    const page = this.page(skip);
 
-}
+    const u = new URL(url);
+    u.searchParams.set('page', page);
 
-handlePagination(url, { extra: { skip } }) {
-const page = this.page(skip);
+    return u.toString();
+  }
 
-const u = new URL(url);  
-u.searchParams.set('page', page);  
+  getCatalogMetas(html) {
 
-return u.toString();
+    const metadataList = [];
+    const $ = load(html);
 
-}
+    const items = $('[data-id], .video-item, .video-list-item');
 
-getCatalogMetas(html) {
+    items.each((index, element) => {
 
-const metadataList = [];  
-const $ = load(html);  
+      const $e = $(element);
 
-const items = $('[data-id], .video-item, .video-list-item');  
+      const link = $e.find('a').attr('href');
+      const img = $e.find('img');
 
-items.each((index, element) => {  
+      const poster =
+        img.attr('data-src') ||
+        img.attr('data-preview') ||
+        img.attr('src');
 
-  const $e = $(element);  
+      const title =
+        img.attr('alt') ||
+        $e.find('.n').text() ||
+        $e.find('a').attr('title');
 
-  const link = $e.find('a').attr('href');  
-  const img = $e.find('img');  
+      if (!link || !title) return;
 
-  const poster =  
-    img.attr('data-src') ||  
-    img.attr('data-preview') ||  
-    img.attr('src');  
+      const videoPageUrl = this.baseUrl + link;
 
-  const title =  
-    img.attr('alt') ||  
-    $e.find('.n').text() ||  
-    $e.find('a').attr('title');  
+      metadataList.push(
+        new meta.MetaPreview(
+          videoPageUrl,
+          'movie',
+          title,
+          poster,
+          { videoPageUrl },
+        ),
+      );
+    });
 
-  if (!link || !title) return;  
+    logger.debug({ count: metadataList.length }, 'catalog items parsed');
 
-  const videoPageUrl = this.baseUrl + link;  
+    return metadataList;
+  }
 
-  metadataList.push(  
-    new meta.MetaPreview(  
-      videoPageUrl,  
-      'movie',  
-      title,  
-      poster,  
-      { videoPageUrl },  
-    ),  
-  );  
-});  
+  async getMetadata(args) {
 
-logger.debug({ count: metadataList.length }, 'catalog items parsed');  
+    logger.debug({ args }, 'getMetadata');
 
-return metadataList;
+    const { id } = args;
 
-}
+    return this.fetchHtml(id)
+      .then(html => this.parseVideoPage({ id, html }))
+      .catch((error) => {
+        logger.error({ error, args }, 'getMetadata error');
+        throw error;
+      });
+  }
 
-async getMetadata(args) {
+  parseVideoPage({ html }) {
 
-logger.debug({ args }, 'getMetadata');  
+    const $ = load(html);
 
-const { id } = args;  
+    const url = $('meta[property="og:url"]').attr('content');
 
-return this.fetchHtml(id)  
-  .then(html => this.parseVideoPage({ id, html }))  
-  .catch((error) => {  
-    logger.error({ error, args }, 'getMetadata error');  
-    throw error;  
-  });
+    const title = $('meta[property="og:title"]').attr('content');
 
-}
+    const poster = $('meta[property="og:image"]').attr('content');
 
-parseVideoPage({ html }) {
+    const description =
+      $('meta[property="og:description"]').attr('content') || title;
 
-const $ = load(html);  
+    const scripts = $('script')
+      .map((i, el) => $(el).html())
+      .get()
+      .join('\n');
 
-const url = $('meta[property="og:url"]').attr('content');  
+    // 🔥 Attempt old stream_data (fixed parsing)
+    const regex = /stream_data\s*=\s*(\{[^;]+\})/;
+    const match = scripts.match(regex);
 
-const title = $('meta[property="og:title"]').attr('content');  
+    let streams = [];
 
-const poster = $('meta[property="og:image"]').attr('content');  
+    if (match) {
+      try {
+        let jsonString = match[1];
 
-const description =  
-  $('meta[property="og:description"]').attr('content') || title;  
+        // Fix invalid JSON keys
+        jsonString = jsonString.replace(/(\w+):/g, '"$1":');
 
-const scripts = $('script')  
-  .map((i, el) => $(el).html())  
-  .get()  
-  .join('\n');  
+        const streamsData = JSON.parse(jsonString);
 
-// 🔥 Attempt old stream_data (fixed parsing)  
-const regex = /stream_data\s*=\s*(\{[^;]+\})/;  
-const match = scripts.match(regex);  
+        streams = Object.entries(streamsData).map(([quality, url]) => ({
+          name: quality,
+          url,
+          type: Provider.TYPE,
+        }));
 
-let streams = [];  
+      } catch (e) {
+        logger.warn({ error: e }, '⚠️ Failed to parse stream_data');
+      }
+    }
 
-if (match) {  
-  try {  
-    let jsonString = match[1];  
+    // 🔥 Fallback: extract m3u8 / mp4 directly
+    if (!streams.length) {
+      const urls = scripts.match(/https?:\/\/[^"' ]+\.(m3u8|mp4)[^"' ]*/g);
 
-    // Fix invalid JSON keys  
-    jsonString = jsonString.replace(/(\w+):/g, '"$1":');  
+      if (urls && urls.length) {
+        streams = urls.map((u) => ({
+          name: u.includes('m3u8') ? 'hls' : 'mp4',
+          url: u,
+          type: Provider.TYPE,
+        }));
 
-    const streamsData = JSON.parse(jsonString);  
+        logger.debug({ streams }, 'fallback streams');
+      }
+    }
 
-    streams = Object.entries(streamsData).map(([quality, url]) => ({  
-      name: quality,  
-      url,  
-      type: Provider.TYPE,  
-    }));  
+    if (!streams.length) {
+      logger.warn('⚠️ No streams found');
+      return {};
+    }
 
-  } catch (e) {  
-    logger.warn({ error: e }, '⚠️ Failed to parse stream_data');  
-  }  
-}  
-
-// 🔥 Fallback: extract m3u8 / mp4 directly  
-if (!streams.length) {  
-  const urls = scripts.match(/https?:\/\/[^"' ]+\.(m3u8|mp4)[^"' ]*/g);  
-
-  if (urls && urls.length) {  
-    streams = urls.map((u) => ({  
-      name: u.includes('m3u8') ? 'hls' : 'mp4',  
-      url: u,  
-      type: Provider.TYPE,  
-    }));  
-
-    logger.debug({ streams }, 'fallback streams');  
-  }  
-}  
-
-if (!streams.length) {  
-  logger.warn('⚠️ No streams found');  
-  return {};  
-}  
-
-return new meta.MetaResponse(  
-  url,  
-  'movie',  
-  title,  
-  {  
-    streams,  
-    poster,  
-    background: poster,  
-    description,  
-  },  
-);
-
-}
+    return new meta.MetaResponse(
+      url,
+      'movie',
+      title,
+      {
+        streams,
+        poster,
+        background: poster,
+        description,
+      },
+    );
+  }
 }
 
 module.exports = SpankbangProvider.create;
