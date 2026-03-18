@@ -99,16 +99,16 @@ $('.thumb-list__item').each((_, element) => {
   const bestSrc =
     srcset?.split(',').pop()?.trim().split(' ')[0];
 
-  const rawSrc =
-    $img.attr('data-src') ||
-    bestSrc ||
-    $img.attr('data-preview') ||
-    $img.attr('src');
+  // 🔥 get ALL possible sources (xhamster lazy load fix)
+let poster =
+  $img.attr('data-src') ||
+  $img.attr('data-original') ||
+  $img.attr('data-preview') ||
+  bestSrc ||
+  $img.attr('src');
 
-  let poster = rawSrc;
-
-  // 🚫 skip useless images EARLY
-  if (!poster || poster.startsWith('data:')) return;
+// 🚫 if still no usable poster → skip
+if (!poster || poster.startsWith('data:')) return;
 
   // 🔁 force absolute URL
   if (!poster.startsWith('http')) {
