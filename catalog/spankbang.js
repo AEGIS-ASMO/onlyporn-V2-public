@@ -1,14 +1,21 @@
 const catalog = require('./spankbang.json');
 
 const sortBy = [
+  'All',
   'New',
   'Trending',
   'Popular',
-  'Upcoming'
+  'Featured'
 ];
 
-// 🔥 Genre dropdown
+const opt = options => ({
+  'name': 'genre',
+  options
+});
+
 const genres = [
+  '4k Porn',
+  'HD 1080p',
   'Amateur',
   'Students',
   'Japanese',
@@ -21,39 +28,18 @@ const genres = [
   'Uncategorized'
 ];
 
-// 🔥 Quality dropdown (NEW)
-const qualities = [
-  '4k',
-  '1080p',
-  '720p'
-];
-
-// 🔥 Build genre + sort combinations
-const genreOptions = [];
-
-for (const sort of sortBy) {
-  genreOptions.push(sort); // global categories
-}
-
+const options = [
+  'New',
+  'Trending',
+  'Upcoming',
+  'Popular'
+]
 for (const genre of genres) {
   for (const sort of sortBy) {
-    genreOptions.push(`${genre} (${sort})`);
+    options.push(`${genre} (${sort})`);
   }
 }
-
-// 🔥 Replace extras CLEANLY (not push)
-catalog.extra = [
-  { name: 'search' },
-  { name: 'skip' },
-  {
-    name: 'genre',
-    options: genreOptions
-  },
-  {
-    name: 'quality',
-    options: qualities
-  }
-];
+catalog.extra.push((opt(options)));
 
 module.exports = {
   sortBy,
