@@ -26,44 +26,19 @@ class EpornerProvider extends Provider {
     return this.baseUrl;
   }
 
-  handleGenre({ id, extra }) {
-  const genre = extra?.genre;
-
-  // 🛑 HARD GUARD
-  if (!genre || typeof genre !== 'string') {
-    logger.warn('Invalid genre input:', genre);
-    return this.baseUrl;
+  handleSearch({ extra: { search: keyword } }) {
+    return `${this.baseUrl}/search/${encodeURIComponent(keyword)}/`;
   }
 
-  let g;
-
-  try {
-    g = decodeURIComponent(genre);
-  } catch {
-    g = genre;
+  handleGenre({ id, extra: { genre } }) {
+    if (genre.includes('/cat')) {
+      return `${this.baseUrl}${genre}`;
+    }
+    let [category, sortBy] = genre.split('(');
+    category = category.toLowerCase().trim().replace(' ', '-').trim();
+    sortBy = sortByMappings[sortBy.replace(')', '')];
+    return `${this.baseUrl}/cat/${category}${sortBy}`;
   }
-
-  // 🛑 Reject garbage early
-  if (
-    !g ||
-    g.length > 100 ||
-    g.includes('undefined') ||
-    g.includes('null')
-  ) {
-    logger.warn('Corrupt genre:', g);
-    return this.baseUrl;
-  }
-
-  // ✅ ONLY allow valid category links (with normalization)
-  if (g.startsWith('/cat/')) {
-    const clean = g.split('?')[0].split('#')[0];
-    return `${this.baseUrl}${clean.replace(/\/+$/, '')}/`;
-  }
-
-  // ❌ BLOCK EVERYTHING ELSE (THIS MUST BE INSIDE)
-  logger.warn('Blocked non-category genre:', g);
-  return this.baseUrl;
-}
 
   handlePagination(url, { extra: { skip } }) {
     const prefix = url.endsWith('/') ? '' : '/';
@@ -107,42 +82,22 @@ class EpornerProvider extends Provider {
   }
 
   getMetaLinks({ id, html }) {
-  const $ = load(html);
-  const $cats = $('.video-info-tags .vit-category');
+    const $ = load(html);
+    const $cats = $('.video-info-tags .vit-category');
+    return $cats
+      .map((_, cat) => {
+        const $cat = $(cat).children().first();
+        const href = $cat.attr('href');
+        const name = $cat.text();
 
-  const links = [];
-
-  $cats.each((_, cat) => {
-    try {
-      const $cat = $(cat).children().first();
-      let href = $cat.attr('href');
-      const name = $cat.text()?.trim();
-
-      if (!href || !name) return;
-
-      // 🛑 Only allow /cat/
-      if (!href.startsWith('/cat/')) return;
-
-      // 🛑 Clean URL (remove query + hash)
-      href = href.split('?')[0].split('#')[0];
-
-      const safeGenre = encodeURIComponent(href);
-
-      links.push({
-        name,
-        category: 'Genres',
-        url: `stremio:///discover/${encodeURIComponent(
-          process.env.HOST_NAME || Provider.TRANSPORT_URL
-        )}/movie/eporner?genre=${safeGenre}`,
-      });
-
-    } catch (e) {
-      logger.warn('Meta link parse error', e);
-    }
-  });
-
-  return links;
-}
+        return {
+          name,
+          category: 'Genres',
+          url: `stremio:///discover/${encodeURIComponent(process.env.HOST_NAME || Provider.TRANSPORT_URL)}/movie/eporner?genre=${encodeURIComponent(href)}`,
+        };
+      })
+      .toArray();
+  }
 
   parseVideoPage({ id, html }) {
     let regex = /EP.video.player.hash = '(.*)';/;
@@ -215,16 +170,8 @@ class EpornerProvider extends Provider {
 
 selectSources(sources) {
   if (sources.hls) {
-  return {
-    streams: Object.entries(sources.hls)
-      .filter(([k, v]) => v?.src)
-      .map(([quality, v]) => ({
-        url: v.src,
-        name: `HLS ${quality}`,
-        type: Provider.TYPE,
-      })),
-  };
-}
+    return super.getStreams({ videoPageUrl: sources.hls.auto.src });
+  }
 
   if (sources.mp4) {
     const streams = Object.values(sources.mp4).map((mp4) => ({
