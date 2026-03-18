@@ -169,11 +169,7 @@ class Provider {
         }
 
         if (args.extra.genre) {
-  const genreUrl = this.handleGenre(args);
-
-  url = genreUrl.startsWith('http')
-    ? genreUrl
-    : this.baseUrl + genreUrl;
+  url = this.handleGenre(args);
 }
 
       }
