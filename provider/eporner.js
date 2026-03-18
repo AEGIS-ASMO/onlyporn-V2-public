@@ -31,19 +31,31 @@ class EpornerProvider extends Provider {
   }
 
   handleGenre({ id, extra: { genre } }) {
-    if (genre.includes('/cat')) {
-      return `${this.baseUrl}${genre}`;
-    }
-    let [category, sortBy] = genre.split('(');
-    category = category.toLowerCase().trim().replace(' ', '-').trim();
-    sortBy = sortByMappings[sortBy.replace(')', '')];
-    return `${this.baseUrl}/cat/${category}${sortBy}`;
+
+  if (!genre) return this.getInitialUrl(id);
+
+  // ✅ decode safely
+  try {
+    genre = decodeURIComponent(genre);
+  } catch (e) {}
+
+  // ✅ direct category link from tags
+  if (typeof genre === 'string' && genre.startsWith('/cat/')) {
+    return `${this.baseUrl}${genre}`;
   }
 
-  handlePagination(url, { extra: { skip } }) {
-    const prefix = url.endsWith('/') ? '' : '/';
-    return `${prefix}${this.page(skip)}/`;
-  }
+  // ✅ normal UI genre
+  let [category, sortBy] = genre.split('(');
+
+  category = category
+    ?.toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-');
+
+  sortBy = sortByMappings[sortBy?.replace(')', '')] || '/';
+
+  return `${this.baseUrl}/cat/${category}${sortBy}`;
+}
 
   getCatalogMetas(html) {
     const metadataList = [];
@@ -82,22 +94,30 @@ class EpornerProvider extends Provider {
   }
 
   getMetaLinks({ id, html }) {
-    const $ = load(html);
-    const $cats = $('.video-info-tags .vit-category');
-    return $cats
-      .map((_, cat) => {
-        const $cat = $(cat).children().first();
-        const href = $cat.attr('href');
-        const name = $cat.text();
+  const $ = load(html);
+  const $cats = $('.video-info-tags .vit-category');
 
-        return {
-          name,
-          category: 'Genres',
-          url: `stremio:///discover/${encodeURIComponent(process.env.HOST_NAME || Provider.TRANSPORT_URL)}/movie/eporner?genre=${encodeURIComponent(href)}`,
-        };
-      })
-      .toArray();
-  }
+  return $cats
+    .map((_, cat) => {
+      const $cat = $(cat).children().first();
+
+      let href = $cat.attr('href');
+      const name = $cat.text()?.trim();
+
+      // 🚫 skip invalid
+      if (!href || !href.startsWith('/cat/') || !name) return null;
+
+      return {
+        name,
+        category: 'Genres',
+        url: `stremio:///discover/${encodeURIComponent(
+          process.env.HOST_NAME || Provider.TRANSPORT_URL
+        )}/movie/eporner?genre=${encodeURIComponent(href)}`,
+      };
+    })
+    .toArray()
+    .filter(Boolean); // ✅ remove nulls
+}
 
   parseVideoPage({ id, html }) {
     let regex = /EP.video.player.hash = '(.*)';/;
