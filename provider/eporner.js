@@ -31,33 +31,19 @@ class EpornerProvider extends Provider {
   }
 
   handleGenre({ id, extra: { genre } }) {
-
-  if (!genre) return this.getInitialUrl(id);
-
-  // ✅ decode safely
-  try {
-    genre = decodeURIComponent(genre);
-  } catch (e) {}
-
-  // ✅ direct category from tags
-  if (typeof genre === 'string' && genre.startsWith('/cat/')) {
-    return `${this.baseUrl}${genre}`;
+    if (genre.includes('/cat')) {
+      return `${this.baseUrl}${genre}`;
+    }
+    let [category, sortBy] = genre.split('(');
+    category = category.toLowerCase().trim().replace(' ', '-').trim();
+    sortBy = sortByMappings[sortBy.replace(')', '')];
+    return `${this.baseUrl}/cat/${category}${sortBy}`;
   }
 
-  // ✅ UI genre handling
-  let [category, sortBy] = genre.split('(');
-
-  category = category
-    ?.toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-'); // 🔥 FIXED
-
-  sortBy = sortByMappings[sortBy?.replace(')', '')] || '/';
-
-  if (!category) return this.getInitialUrl(id);
-
-  return `${this.baseUrl}/cat/${category}${sortBy}`;
-}
+  handlePagination(url, { extra: { skip } }) {
+    const prefix = url.endsWith('/') ? '' : '/';
+    return `${prefix}${this.page(skip)}/`;
+  }
 
   getCatalogMetas(html) {
     const metadataList = [];
@@ -96,30 +82,22 @@ class EpornerProvider extends Provider {
   }
 
   getMetaLinks({ id, html }) {
-  const $ = load(html);
-  const $cats = $('.video-info-tags .vit-category');
+    const $ = load(html);
+    const $cats = $('.video-info-tags .vit-category');
+    return $cats
+      .map((_, cat) => {
+        const $cat = $(cat).children().first();
+        const href = $cat.attr('href');
+        const name = $cat.text();
 
-  return $cats
-    .map((_, cat) => {
-      const $cat = $(cat).children().first();
-
-      let href = $cat.attr('href');
-      const name = $cat.text()?.trim();
-
-      // 🚫 BLOCK BAD LINKS
-      if (!href || !href.startsWith('/cat/') || !name) return null;
-
-      return {
-        name,
-        category: 'Genres',
-        url: `stremio:///discover/${encodeURIComponent(
-          process.env.HOST_NAME || Provider.TRANSPORT_URL
-        )}/movie/eporner?genre=${encodeURIComponent(href)}`,
-      };
-    })
-    .toArray()
-    .filter(Boolean); // ✅ remove nulls
-}
+        return {
+          name,
+          category: 'Genres',
+          url: `stremio:///discover/${encodeURIComponent(process.env.HOST_NAME || Provider.TRANSPORT_URL)}/movie/eporner?genre=${encodeURIComponent(href)}`,
+        };
+      })
+      .toArray();
+  }
 
   parseVideoPage({ id, html }) {
     let regex = /EP.video.player.hash = '(.*)';/;
