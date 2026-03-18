@@ -31,14 +31,39 @@ class EpornerProvider extends Provider {
   }
 
   handleGenre({ id, extra: { genre } }) {
-    if (genre.includes('/cat')) {
-      return `${this.baseUrl}${genre}`;
-    }
-    let [category, sortBy] = genre.split('(');
-    category = category.toLowerCase().trim().replace(' ', '-').trim();
-    sortBy = sortByMappings[sortBy.replace(')', '')];
-    return `${this.baseUrl}/cat/${category}${sortBy}`;
+
+  if (!genre) return this.baseUrl;
+
+  // 🔥 Case 1: direct category link (/cat/xxx)
+  if (genre.startsWith('/cat/')) {
+    return `${this.baseUrl}${genre}`;
   }
+
+  // 🔥 Case 2: encoded category (failsafe)
+  try {
+    const decoded = decodeURIComponent(genre);
+    if (decoded.startsWith('/cat/')) {
+      return `${this.baseUrl}${decoded}`;
+    }
+  } catch (e) {}
+
+  // 🔥 Case 3: "Anal (Most Recent)"
+  try {
+    let [category, sortBy] = genre.split('(');
+
+    category = category
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-');
+
+    sortBy = sortByMappings[sortBy?.replace(')', '')] || '/';
+
+    return `${this.baseUrl}/cat/${category}${sortBy}`;
+  } catch (e) {
+    logger.warn('Invalid genre format', genre);
+    return this.baseUrl;
+  }
+}
 
   handlePagination(url, { extra: { skip } }) {
     const prefix = url.endsWith('/') ? '' : '/';
@@ -93,7 +118,7 @@ class EpornerProvider extends Provider {
         return {
           name,
           category: 'Genres',
-          url: `stremio:///discover/${encodeURIComponent(process.env.HOST_NAME || Provider.TRANSPORT_URL)}/movie/eporner?genre=${encodeURIComponent(href)}`,
+          url: `stremio:///discover/${encodeURIComponent(process.env.HOST_NAME || Provider.TRANSPORT_URL)}/movie/eporner?genre=${href}`,
         };
       })
       .toArray();
