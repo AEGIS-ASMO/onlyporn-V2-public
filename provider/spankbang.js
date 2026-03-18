@@ -53,74 +53,70 @@ class SpankbangProvider extends Provider {
     }
   }
 
-  // ✅ FIXED GENRE HANDLING
   handleGenre({ extra }) {
 
-  const { genre, sort, quality } = extra;
+    const { genre, sort, quality } = extra;
 
-  let url;
+    let url;
 
-  const qualityMap = {
-    '4k': 'uhd',
-    '1080p': 'fhd',
-    '720p': 'hd',
-  };
+    const qualityMap = {
+      '4k': 'uhd',
+      '1080p': 'fhd',
+      '720p': 'hd',
+    };
 
-  const q = qualityMap[quality];
+    const q = qualityMap[quality];
 
-  // 🎯 CASE 1: GLOBAL (no category, only quality + sort)
-  if (!genre || genre === 'All' || ['4k', '1080p', '720p'].includes(genre)) {
+    if (!genre || genre === 'All' || ['4k', '1080p', '720p'].includes(genre)) {
 
-    const path = pathMappings[
-      sort ? sort.charAt(0).toUpperCase() + sort.slice(1) : 'Trending'
-    ] || pathMappings.Trending;
+      const path = pathMappings[
+        sort ? sort.charAt(0).toUpperCase() + sort.slice(1) : 'Trending'
+      ] || pathMappings.Trending;
 
-    url = `${this.baseUrl}${path}`;
+      url = `${this.baseUrl}${path}`;
 
-    if (q) {
+      if (q) {
+        const u = new URL(url);
+        u.searchParams.set('q', q);
+        url = u.toString();
+      }
+
+    } else {
+
+      url = `${this.baseUrl}/s/${encodeURIComponent(genre)}/`;
+
       const u = new URL(url);
-      u.searchParams.set('q', q);
+
+      if (q) {
+        u.searchParams.set('q', q);
+      }
+
+      const sortMap = {
+        'trending': '',
+        'popular': 'views',
+        'new': 'new',
+        'featured': 'featured'
+      };
+
+      if (sort) {
+        const mapped = sortMap[sort.toLowerCase()];
+        if (mapped) {
+          u.searchParams.set('o', mapped);
+        }
+      }
+
       url = u.toString();
     }
 
-  } else {
+    const finalUrl = new URL(url);
+    finalUrl.searchParams.set('_', Date.now());
 
-    // 🎯 CASE 2: CATEGORY BASED (milf, teen, etc.)
-    url = `${this.baseUrl}/s/${encodeURIComponent(genre)}/`;
+    url = finalUrl.toString();
 
-    const u = new URL(url);
+    logger.info({ url }, 'FINAL GENRE URL');
 
-    if (q) {
-      u.searchParams.set('q', q);
-    }
-
-    const sortMap = {
-  'trending': '',
-  'popular': 'views',
-  'new': 'new',
-  'featured': 'featured'
-};
-
-if (sort) {
-  const mapped = sortMap[sort.toLowerCase()];
-  if (mapped) {
-    u.searchParams.set('o', mapped);
+    return url;
   }
-}
-
-    url = u.toString();
-  }
-
-// 🔥 FORCE REFRESH (prevents identical ordering / caching)
-const finalUrl = new URL(url);
-finalUrl.searchParams.set('_', Date.now());
-
-url = finalUrl.toString();
-
-  console.log('✅ FINAL GENRE URL:', url);
-
-  return url;
-}
 
   handlePagination(url, { extra: { skip } }) {
     const page = this.page(skip);
@@ -129,31 +125,27 @@ url = finalUrl.toString();
     return u.toString();
   }
 
-  // ✅ FIXED THUMBNAILS
   getCatalogMetas(html) {
     const metadataList = [];
     const $ = load(html);
 
     const items = $('[data-id], .video-item, .video-list-item');
-
     const seen = new Set();
 
-items.each((index, element) => {
-  const $e = $(element);
+    items.each((index, element) => {
+      const $e = $(element);
 
-  const link = $e.find('a').attr('href');
+      const link = $e.find('a').attr('href');
+      if (!link || seen.has(link)) return;
+      seen.add(link);
 
-  if (!link || seen.has(link)) return;
-  seen.add(link);
-
-  const img = $e.find('img');
+      const img = $e.find('img');
 
       let poster =
         img.attr('data-src') ||
         img.attr('data-preview') ||
         img.attr('src');
 
-      // 🔥 SRCSET (BEST QUALITY)
       const srcset = img.attr('data-srcset') || img.attr('srcset');
       if (srcset) {
         const parts = srcset.split(',');
@@ -161,7 +153,6 @@ items.each((index, element) => {
         if (best) poster = best;
       }
 
-      // 🔥 FORCE HIGH RES
       if (poster) {
         poster = poster
           .replace(/\/small\//, '/large/')
@@ -201,7 +192,6 @@ items.each((index, element) => {
       });
   }
 
-  // 🚀 FINAL OPTIMIZED STREAM PARSER
   async parseVideoPage({ html }) {
 
     const $ = load(html);
@@ -219,63 +209,59 @@ items.each((index, element) => {
       .join('\n');
 
     let streams = [];
-// 🔥 EXTRACT REAL VIDEO FILES (4K SOURCE)
-const fileMatches = scripts.match(/"(\d{3,4}p|4k)"\s*:\s*"([^"]+)"/gi);
 
-if (fileMatches) {
-  const added = new Set();
+    const fileMatches = scripts.match(/"(\d{3,4}p|4k)"\s*:\s*"([^"]+)"/gi);
 
-  fileMatches.forEach(entry => {
-    const match = entry.match(/"(\d{3,4}p|4k)"\s*:\s*"([^"]+)"/i);
-    if (!match) return;
+    if (fileMatches) {
+      const added = new Set();
 
-    const quality = match[1].toLowerCase();
-    const url = match[2];
+      fileMatches.forEach(entry => {
+        const match = entry.match(/"(\d{3,4}p|4k)"\s*:\s*"([^"]+)"/i);
+        if (!match) return;
 
-    if (!url || added.has(url)) return;
-    added.add(url);
+        const quality = match[1].toLowerCase();
+        const url = match[2];
 
-    let name = quality.toUpperCase();
+        if (!url || added.has(url)) return;
+        added.add(url);
 
-    if (quality === '4k') name = '🔥 4K';
-    if (quality === '2160p') name = '🔥 4K';
+        let name = quality.toUpperCase();
 
-    streams.push({
-      name,
-      url,
-      type: 'mp4'
-    });
-  });
+        if (quality === '4k' || quality === '2160p') name = '🔥 4K';
 
-  logger.info({ streams }, '🎯 MP4 QUALITY FOUND');
-}
-
-const jsonMatch = scripts.match(/window\.__data\s*=\s*(\{[\s\S]*?\});/);
-
-if (jsonMatch) {
-  try {
-    const data = JSON.parse(jsonMatch[1]);
-
-    const files = data?.video?.files || {};
-
-    Object.entries(files).forEach(([quality, url]) => {
-      if (!url) return;
-
-      streams.push({
-        name: quality.toUpperCase(), // 4k, 1080p etc
-        url,
-        type: 'mp4'
+        streams.push({
+          name,
+          url,
+          type: 'mp4'
+        });
       });
-    });
 
-    console.log('🔥 MP4 FILES:', files);
+      logger.info({ streams }, 'MP4 QUALITY FOUND');
+    }
 
-  } catch (e) {
-    console.log('JSON parse failed');
-  }
-}
+    const jsonMatch = scripts.match(/window\.__data\s*=\s*(\{[\s\S]*?\});/);
 
-    // 🔥 HLS PARSER WITH CACHE
+    if (jsonMatch) {
+      try {
+        const data = JSON.parse(jsonMatch[1]);
+        const files = data?.video?.files || {};
+
+        Object.entries(files).forEach(([quality, url]) => {
+          if (!url) return;
+
+          streams.push({
+            name: quality.toUpperCase(),
+            url,
+            type: 'mp4'
+          });
+        });
+
+        logger.info({ files }, 'MP4 FILES');
+      } catch {
+        logger.warn('JSON parse failed');
+      }
+    }
+
     const m3u8Match = scripts.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
 
     if (m3u8Match) {
@@ -286,120 +272,84 @@ if (jsonMatch) {
         if (hlsCache.has(masterUrl)) {
           const cached = hlsCache.get(masterUrl);
           if (Date.now() - cached.time < CACHE_TTL) {
-            console.log('⚡ CACHE HIT');
+            logger.info('CACHE HIT');
             streams = [...streams, ...cached.streams];
           }
         }
 
-        // Always fetch HLS (for fallback qualities)
-
-          const res = await fetch(masterUrl, {
-  headers: {
-    'referer': 'https://spankbang.com/',
-    'user-agent': 'Mozilla/5.0'
-  }
-});
-          const text = await res.text();
-
-          const lines = text.split('\n');
-          const variants = [];
-
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-
-            if (line.includes('#EXT-X-STREAM-INF')) {
-
-              const height = parseInt(line.match(/RESOLUTION=\d+x(\d+)/)?.[1] || 0);
-              const bitrate = parseInt(line.match(/BANDWIDTH=(\d+)/)?.[1] || 0);
-
-              let codec = /hev1|hvc1/i.test(line) ? 'HEVC' : 'AVC';
-              let isHDR = /VIDEO-RANGE=PQ|VIDEO-RANGE=HLG|hdr/i.test(line);
-              let isDV = /dvhe|dvh1|dolby/i.test(line);
-
-              const next = lines[i + 1];
-              if (!next) continue;
-
-              let streamUrl = new URL(next, masterUrl).toString();
-
-              // Only skip truly broken entries
-if (!height || !streamUrl) continue;
-
-              let name = `${height || 'Auto'}p`;
-
-              if (isDV) name += ' DV';
-              else if (isHDR) name += ' HDR';
-
-              name += ` ${codec}`;
-
-              variants.push({
-                name,
-                url: streamUrl,
-                type: Provider.TYPE,
-                height,
-                bitrate,
-                isHDR,
-                isDV
-              });
-            }
+        const res = await fetch(masterUrl, {
+          headers: {
+            'referer': 'https://spankbang.com/',
+            'user-agent': 'Mozilla/5.0'
           }
+        });
 
-          variants.sort((a, b) => b.height - a.height || b.bitrate - a.bitrate);
+        const text = await res.text();
 
-          streams = variants.map(v => {
-  let name = `${v.height}p`;
+        const lines = text.split('\n');
+        const variants = [];
 
-  if (v.height >= 2160) name = '4K';
-  else if (v.height >= 1440) name = '1440p';
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
 
-  if (v.isDV) name += ' Dolby Vision';
-  else if (v.isHDR) name += ' HDR';
+          if (line.includes('#EXT-X-STREAM-INF')) {
 
-  if (v.bitrate > 10000000) name += ' High Bitrate';
-// 🔥 REMOVE DUPLICATES
-const unique = new Map();
+            const height = parseInt(line.match(/RESOLUTION=\d+x(\d+)/)?.[1] || 0);
+            const bitrate = parseInt(line.match(/BANDWIDTH=(\d+)/)?.[1] || 0);
 
-streams.forEach(s => {
-  if (!s.url) return;
-  unique.set(s.url, s);
-});
+            let isHDR = /VIDEO-RANGE=PQ|VIDEO-RANGE=HLG|hdr/i.test(line);
+            let isDV = /dvhe|dvh1|dolby/i.test(line);
 
-streams = Array.from(unique.values());
+            const next = lines[i + 1];
+            if (!next) continue;
 
-// 🔥 SORT BEST FIRST
-streams.sort((a, b) => {
-  const score = s => {
-    if (s.name.includes('4K')) return 100;
-    if (s.name.includes('2160')) return 100;
-    if (s.name.includes('1440')) return 90;
-    if (s.name.includes('1080')) return 80;
-    if (s.name.includes('720')) return 60;
-    return 10;
-  };
-  return score(b) - score(a);
-});
+            let streamUrl = new URL(next, masterUrl).toString();
+            if (!height || !streamUrl) continue;
 
-  return {
-    name,
-    url: v.url,
-    type: 'hls'
-  };
-});
-console.log('🎬 VARIANTS:', variants);
-
-          hlsCache.set(masterUrl, {
-            streams,
-            time: Date.now()
-          });
-
-          console.log('✅ STREAM READY:', streams);
+            variants.push({
+              url: streamUrl,
+              height,
+              bitrate,
+              isHDR,
+              isDV
+            });
+          }
         }
+
+        variants.sort((a, b) => b.height - a.height || b.bitrate - a.bitrate);
+
+        const hlsStreams = variants.map(v => {
+          let name = `${v.height}p`;
+
+          if (v.height >= 2160) name = '4K';
+          else if (v.height >= 1440) name = '1440p';
+
+          if (v.isDV) name += ' Dolby Vision';
+          else if (v.isHDR) name += ' HDR';
+
+          if (v.bitrate > 10000000) name += ' High Bitrate';
+
+          return {
+            name,
+            url: v.url,
+            type: 'hls'
+          };
+        });
+
+        streams = [...streams, ...hlsStreams];
+
+        hlsCache.set(masterUrl, {
+          streams: hlsStreams,
+          time: Date.now()
+        });
+
+        logger.info({ variants }, 'HLS VARIANTS');
 
       } catch (e) {
         logger.warn({ e }, 'HLS failed');
       }
     }
 
-    // 🔥 MP4 fallback
     if (!streams.length) {
       const urls = scripts.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/g);
 
@@ -413,6 +363,27 @@ console.log('🎬 VARIANTS:', variants);
     }
 
     if (!streams.length) return {};
+
+    // 🔥 FINAL CLEANUP
+    const unique = new Map();
+    streams.forEach(s => {
+      if (!s.url) return;
+      unique.set(s.url, s);
+    });
+
+    streams = Array.from(unique.values());
+
+    streams.sort((a, b) => {
+      const score = s => {
+        if (s.name.includes('4K')) return 100;
+        if (s.name.includes('2160')) return 100;
+        if (s.name.includes('1440')) return 90;
+        if (s.name.includes('1080')) return 80;
+        if (s.name.includes('720')) return 60;
+        return 10;
+      };
+      return score(b) - score(a);
+    });
 
     return new meta.MetaResponse(url, 'movie', title, {
       streams,
