@@ -62,7 +62,6 @@ class SpankbangProvider extends Provider {
 
     let url;
 
-    // 🔍 SEARCH + ORDER
     if (order) {
       url = this.handleSearch({
         extra: { search: keyword.trim() },
@@ -76,7 +75,6 @@ class SpankbangProvider extends Provider {
       url = `${this.baseUrl}${path}`;
     }
 
-    // 🔥 QUALITY FILTER (SAFE)
     if (quality) {
       const qualityMap = {
         '4k': 'uhd',
@@ -121,10 +119,27 @@ class SpankbangProvider extends Provider {
       const link = $e.find('a').attr('href');
       const img = $e.find('img');
 
-      const poster =
+      let poster =
         img.attr('data-src') ||
-        img.attr('data-preview') ||
-        img.attr('src');
+        img.attr('src') ||
+        img.attr('data-preview');
+
+      // 🔥 Upgrade thumbnail quality
+      if (poster) {
+        try {
+          const u = new URL(poster);
+          u.pathname = u.pathname
+            .replace(/\/small\//, '/large/')
+            .replace(/\/medium\//, '/large/')
+            .replace(/\/thumbs\//, '/thumbs/large/');
+          poster = u.toString();
+        } catch {
+          poster = poster
+            .replace('/small/', '/large/')
+            .replace('/medium/', '/large/')
+            .replace('/thumbs/', '/thumbs/large/');
+        }
+      }
 
       const title =
         img.attr('alt') ||
@@ -165,14 +180,13 @@ class SpankbangProvider extends Provider {
       });
   }
 
-  parseVideoPage({ html }) {
+  // 🔥 NOW ASYNC
+  async parseVideoPage({ html }) {
 
     const $ = load(html);
 
     const url = $('meta[property="og:url"]').attr('content');
-
     const title = $('meta[property="og:title"]').attr('content');
-
     const poster = $('meta[property="og:image"]').attr('content');
 
     const description =
@@ -183,17 +197,15 @@ class SpankbangProvider extends Provider {
       .get()
       .join('\n');
 
-    // 🔥 Attempt old stream_data (fixed parsing)
     const regex = /stream_data\s*=\s*(\{[^;]+\})/;
     const match = scripts.match(regex);
 
     let streams = [];
 
+    // ✅ Original method (kept)
     if (match) {
       try {
         let jsonString = match[1];
-
-        // Fix invalid JSON keys
         jsonString = jsonString.replace(/(\w+):/g, '"$1":');
 
         const streamsData = JSON.parse(jsonString);
@@ -209,18 +221,116 @@ class SpankbangProvider extends Provider {
       }
     }
 
-    // 🔥 Fallback: extract m3u8 / mp4 directly
+    // 🚀 ADVANCED HLS PARSER
     if (!streams.length) {
-      const urls = scripts.match(/https?:\/\/[^"' ]+\.(m3u8|mp4)[^"' ]*/g);
+      const m3u8Match = scripts.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+
+      if (m3u8Match) {
+        const masterUrl = m3u8Match[0];
+
+        try {
+          console.log('MASTER PLAYLIST:', masterUrl);
+
+          const res = await fetch(masterUrl);
+          const text = await res.text();
+
+          const lines = text.split('\n');
+          const variants = [];
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            if (line.includes('#EXT-X-STREAM-INF')) {
+
+              const resolutionMatch = line.match(/RESOLUTION=\d+x(\d+)/);
+              const height = resolutionMatch ? parseInt(resolutionMatch[1]) : 0;
+
+              const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/);
+              const bitrate = bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0;
+
+              let codec = 'AVC';
+              if (/hev1|hvc1/i.test(line)) codec = 'HEVC';
+
+              let isHDR = false;
+              let isDV = false;
+
+              if (line.includes('VIDEO-RANGE=PQ') || line.includes('VIDEO-RANGE=HLG')) {
+                isHDR = true;
+              }
+
+              if (/hdr/i.test(line)) isHDR = true;
+
+              if (/dvhe|dvh1|dolby/i.test(line)) {
+                isDV = true;
+                isHDR = true;
+              }
+
+              const nextLine = lines[i + 1];
+
+              if (nextLine) {
+                let streamUrl = new URL(nextLine, masterUrl).toString();
+
+                if (/hdr|hlg/i.test(streamUrl)) isHDR = true;
+                if (/dv|dolby/i.test(streamUrl)) {
+                  isDV = true;
+                  isHDR = true;
+                }
+                if (/hevc|h265/i.test(streamUrl)) codec = 'HEVC';
+
+                let name = height ? `${height}p` : 'Auto';
+
+                if (isDV) name += ' DV';
+                else if (isHDR) name += ' HDR';
+
+                name += ` ${codec}`;
+
+                if (bitrate) {
+                  const mbps = (bitrate / 1000000).toFixed(1);
+                  name += ` ${mbps}Mbps`;
+                }
+
+                variants.push({
+                  name,
+                  url: streamUrl,
+                  type: Provider.TYPE,
+                  height,
+                  bitrate,
+                  isHDR,
+                  isDV,
+                  codec,
+                });
+              }
+            }
+          }
+
+          streams = variants.sort((a, b) => {
+            if (b.height !== a.height) return b.height - a.height;
+            if (b.isDV !== a.isDV) return b.isDV - a.isDV;
+            if (b.isHDR !== a.isHDR) return b.isHDR - a.isHDR;
+            if (b.codec !== a.codec) return b.codec === 'HEVC' ? 1 : -1;
+            return b.bitrate - a.bitrate;
+          }).map(({ height, bitrate, isHDR, isDV, codec, ...rest }) => rest);
+
+          console.log('FINAL STREAMS:', streams);
+
+        } catch (err) {
+          logger.warn({ err }, '⚠️ Failed parsing m3u8');
+        }
+      }
+    }
+
+    // 🔥 MP4 fallback (SAFE)
+    if (!streams.length) {
+      const urls = scripts.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/g);
 
       if (urls && urls.length) {
-        streams = urls.map((u) => ({
-          name: u.includes('m3u8') ? 'hls' : 'mp4',
+        streams = urls.map(u => ({
+          name: 'mp4',
           url: u,
           type: Provider.TYPE,
         }));
 
-        logger.debug({ streams }, 'fallback streams');
+        console.log('MP4 FALLBACK:', streams);
       }
     }
 
