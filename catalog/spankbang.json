@@ -3,15 +3,16 @@
   "name": "OnlyPorn: SpankBang",
   "id": "spankbang",
   "extra": [
-    { "name": "search" },
-    { "name": "skip" },
-    { "name": "genre" },
-    { "name": "quality" }
+    {
+      "name": "search"
+    },
+    {
+      "name": "skip"
+    }
   ],
   "extraSupported": [
     "search",
     "genre",
-    "skip",
-    "quality"
+    "skip"
   ]
 }
