@@ -37,30 +37,31 @@ class XhamsterProvider extends Provider {
 
   handleGenre({ id, extra: { genre } }) {
 
-  let path = '';
-
-  // ✅ keep 4k support
-  if (id.includes('4k')) {
-    path += '/4k';
-  }
-
-  // ✅ EXISTING: Best filters
+  // ✅ 1. Best filters (keep 4k support ONLY here)
   if (pathMappings[genre]) {
+    let path = '';
+
+    if (id.includes('4k')) {
+      path += '/4k';
+    }
+
     path += pathMappings[genre];
+
     return this.baseUrl + path;
   }
 
-  // 🔥 NEW: categories support
+  // 🔥 2. Categories (NEVER use /4k here)
   if (genre) {
     const slug = genre
       .toLowerCase()
       .replace(/\s+/g, '-')
-      .replace(/&/g, '')       // "Old & Young" → "old-young"
-      .replace(/[^a-z0-9-]/g, ''); // safety cleanup
+      .replace(/&/g, '')
+      .replace(/[^a-z0-9-]/g, '');
 
-    return `${this.baseUrl}${path}/categories/${slug}`;
+    return `${this.baseUrl}/categories/${slug}`;
   }
 
+  // fallback
   return this.getInitialUrl(id);
 }
 
