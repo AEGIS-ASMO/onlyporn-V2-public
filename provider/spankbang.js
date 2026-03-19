@@ -49,7 +49,7 @@ class SpankbangProvider extends Provider {
       const html = await response.text();
 
       if (html.includes('SpankBang contains adult content')) {
-        logger.warn('⚠️ Blocked by age/cookie wall');
+        console.log('⚠️ Blocked by age/cookie wall');
       }
 
       return html;
@@ -190,9 +190,10 @@ class SpankbangProvider extends Provider {
 
     let streams = [];
 
-    // ✅ FAST PATH (no network)
     if (match) {
       try {
+        console.log('⚡ Using stream_data');
+
         let jsonString = match[1];
         jsonString = jsonString.replace(/(\w+):/g, '"$1":');
 
@@ -205,12 +206,12 @@ class SpankbangProvider extends Provider {
         }));
 
       } catch (e) {
-        logger.warn({ error: e }, '⚠️ Failed to parse stream_data');
+        console.log('❌ stream_data parse failed', e);
       }
     }
 
-    // 🚀 EARLY RETURN (huge speed win)
     if (streams.length) {
+      console.log('✅ stream_data success');
       return new meta.MetaResponse(url, 'movie', title, {
         streams,
         poster,
@@ -219,17 +220,15 @@ class SpankbangProvider extends Provider {
       });
     }
 
-    // 🚀 HLS
     const m3u8Match = scripts.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
 
     if (!m3u8Match) {
-      logger.warn('⚠️ No streams found');
+      console.log('❌ No m3u8 found');
       return {};
     }
 
     const masterUrl = m3u8Match[0];
 
-    // ⚡ CACHE FIRST
     if (hlsCache.has(masterUrl)) {
       const cached = hlsCache.get(masterUrl);
 
@@ -244,9 +243,10 @@ class SpankbangProvider extends Provider {
       }
     }
 
+    console.log('🌐 HLS parsing started');
+
     const has4k = masterUrl.includes(',4k,');
     let forced4kStream = null;
-
     let forced4kUrl;
 
     if (!has4k) {
@@ -269,7 +269,6 @@ class SpankbangProvider extends Provider {
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
       };
 
-      // ⚡ PARALLEL
       const [playlistRes, fourkRes] = await Promise.all([
         fetch(masterUrl, { headers }),
         forced4kUrl
@@ -277,7 +276,10 @@ class SpankbangProvider extends Provider {
           : Promise.resolve(null),
       ]);
 
+      console.log('📡 Playlist fetched');
+
       if (fourkRes && fourkRes.ok) {
+        console.log('🔥 4K FOUND');
         forced4kStream = {
           name: '2160p 4K',
           url: forced4kUrl,
@@ -291,7 +293,7 @@ class SpankbangProvider extends Provider {
       const variants = [];
 
       for (let i = 0; i < lines.length; i++) {
-        if (variants.length >= 12) break; // 🔥 limit parsing
+        if (variants.length >= 12) break;
 
         const line = lines[i];
 
@@ -332,12 +334,14 @@ class SpankbangProvider extends Provider {
         time: Date.now(),
       });
 
+      console.log('✅ STREAMS READY');
+
     } catch (err) {
-      logger.warn({ err }, '⚠️ HLS parsing failed');
+      console.log('❌ HLS parsing failed', err);
     }
 
     if (!streams.length) {
-      logger.warn('⚠️ No streams found');
+      console.log('❌ No streams found after parsing');
       return {};
     }
 
