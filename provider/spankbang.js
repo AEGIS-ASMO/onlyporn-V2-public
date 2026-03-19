@@ -38,13 +38,17 @@ class SpankbangProvider extends Provider {
     try {
       const response = await fetch(url, {
         headers: {
-          'accept': 'text/html',
-          'accept-language': 'en-US,en;q=0.9',
-          'referer': 'https://spankbang.com/',
-          'cookie': 'sb=1; age_verified=1;', // ✅ ADDED AGE BYPASS
-          'user-agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
-        },
+  'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'accept-language': 'en-US,en;q=0.9',
+  'cache-control': 'no-cache',
+  'pragma': 'no-cache',
+  'upgrade-insecure-requests': '1',
+  'referer': 'https://spankbang.com/',
+  'origin': 'https://spankbang.com',
+  'cookie': 'sb=1; age_verified=1; hasVisited=1;',
+  'user-agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+}
       });
 
       const html = await response.text();
