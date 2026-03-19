@@ -117,7 +117,7 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
     return url.replace(/\/$/, '') + `/${page}/`;
   }
 
-  getCatalogMetas(html) {
+  getCatalogMetas(html, currentUrl) {
     const metadataList = [];
     const $ = load(html);
 
@@ -153,21 +153,24 @@ items.each((index, element) => {
       const title =
         img.attr('alt') ||
         $e.find('.n').text() ||
-        $e.find('a').attr('title');
+        $e.attr('title');
 
       if (!link || !title) return;
 
       const videoPageUrl = this.baseUrl + link;
 
+// 🔥 ADD THIS
+const uniqueId = videoPageUrl + '|' + currentUrl;
+
       metadataList.push(
-        new meta.MetaPreview(
-          videoPageUrl,
-          'movie',
-          title,
-          poster,
-          { videoPageUrl },
-        ),
-      );
+  new meta.MetaPreview(
+    uniqueId, // ✅ USE UNIQUE ID
+    'movie',
+    title,
+    poster,
+    { videoPageUrl }, // keep original URL for playback
+  ),
+);
     });
 
     logger.debug({ count: metadataList.length }, 'catalog items parsed');
