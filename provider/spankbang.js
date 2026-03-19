@@ -114,7 +114,7 @@ class SpankbangProvider extends Provider {
     const metadataList = [];
     const $ = load(html);
 
-    const items = $('a[href^="/"][class*="video"]');
+    const items = $('a[href^="/"][href*="/video"]');
 
     const seen = new Set();
 
