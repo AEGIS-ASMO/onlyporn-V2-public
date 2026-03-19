@@ -53,9 +53,9 @@ class SpankbangProvider extends Provider {
 
       const html = await response.text();
 
-      if (html.includes('SpankBang contains adult content')) {
-        console.log('⚠️ Blocked by age/cookie wall');
-      }
+      if (!html.includes('stream_data') && !html.includes('.m3u8')) {
+  console.log('🚫 REALLY BLOCKED');
+}
 
       return html;
     } catch (error) {
@@ -115,7 +115,7 @@ class SpankbangProvider extends Provider {
     const metadataList = [];
     const $ = load(html);
 
-    const items = $('[data-id], .video-item, .video-list-item');
+    const items = $('a[href^="/"][class*="video"]');
 
     items.each((index, element) => {
       const $e = $(element);
