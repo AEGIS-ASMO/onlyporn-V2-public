@@ -239,14 +239,14 @@ if (!streams.length) {
         const cached = hlsCache.get(masterUrl);
 
         if (Date.now() - cached.time < CACHE_TTL) {
-          logger.info('⚡ CACHE HIT');
+          console.log('⚡ CACHE HIT');
           streams = cached.streams;
         }
       }
 
       if (!streams.length) {
 
-        logger.info('🌐 FETCHING PLAYLIST:', masterUrl);
+        console.log('🌐 FETCHING PLAYLIST:', masterUrl);
 
         const res = await fetch(masterUrl);
         const text = await res.text();
@@ -337,7 +337,7 @@ if (!streams.length) {
           time: Date.now(),
         });
 
-        logger.info('✅ STREAMS READY:', streams);
+        console.log('✅ STREAMS READY:', streams);
       }
 
     } catch (err) {
@@ -357,7 +357,7 @@ if (!streams.length) {
           type: Provider.TYPE,
         }));
 
-        logger.info('MP4 FALLBACK:', streams);
+        console.log('MP4 FALLBACK:', streams);
       }
     }
 
