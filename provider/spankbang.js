@@ -46,12 +46,19 @@ class SpankbangProvider extends Provider {
   'referer': 'https://spankbang.com/',
   'origin': 'https://spankbang.com',
   'cookie': 'sb=1; age_verified=1; hasVisited=1;',
+  'sec-fetch-site': 'same-origin',
+  'sec-fetch-mode': 'navigate',
+  'sec-fetch-user': '?1',
+  'sec-fetch-dest': 'document',
   'user-agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
 }
       });
 
       const html = await response.text();
+if (html.includes('cf-chl') || html.includes('Just a moment')) {
+  console.log('🚫 CLOUDFLARE BLOCK');
+}
 
       if (!html.includes('stream_data') && !html.includes('.m3u8')) {
   console.log('🚫 REALLY BLOCKED');
