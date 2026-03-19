@@ -1,47 +1,71 @@
 const catalog = require('./spankbang.json');
 
-const sortBy = [
-  'All',
-  'New',
-  'Trending',
-  'Popular',
-  'Featured'
-];
-
 const opt = options => ({
-  'name': 'genre',
+  name: 'genre',
   options
 });
 
-const genres = [
-  '4k Porn',
-  'HD 1080p',
-  'Amateur',
-  'Students',
-  'Japanese',
-  'Asian Porn',
-  'Big Tits',
-  'Teens',
-  'Family',
-  'Creampie',
-  'Small Tits',
-  'Uncategorized'
+// ✅ BASE SORTING (NO SEARCH)
+const baseCategories = [
+  'Trending',
+  'New',
+  'Popular',
+  'Upcoming'
 ];
 
-const options = [
-  'New',
-  'Trending',
-  'Upcoming',
-  'Popular'
-]
-for (const genre of genres) {
-  for (const sort of sortBy) {
-    options.push(`${genre} (${sort})`);
+// ✅ 4K FILTER (VALID COMBOS ONLY)
+const fourK = [
+  '4K (Trending)',
+  '4K (New)',
+  '4K (Popular)',
+  '4K (Upcoming)'
+];
+
+// ✅ HIGH DEMAND SEARCH KEYWORDS
+const searchGenres = [
+  'Milf',
+  'Teen',
+  'Amateur',
+  'Asian',
+  'Big Tits',
+  'Blonde',
+  'Ebony',
+  'Latina',
+  'Lesbian',
+  'Anal',
+  'Creampie'
+];
+
+// ✅ SEARCH + SORT COMBINATIONS
+const searchOptions = [];
+
+const validSorts = ['Trending', 'New', 'Popular'];
+
+for (const genre of searchGenres) {
+  // default (no sort = trending)
+  searchOptions.push(genre);
+
+  for (const sort of validSorts) {
+    searchOptions.push(`${genre} (${sort})`);
+  }
+
+  // 🔥 4K variants for search
+  searchOptions.push(`${genre} (4K)`);
+
+  for (const sort of validSorts) {
+    searchOptions.push(`${genre} (4K ${sort})`);
   }
 }
-catalog.extra.push((opt(options)));
+
+// ✅ FINAL OPTIONS
+const options = [
+  ...baseCategories,
+  ...fourK,
+  ...searchOptions
+];
+
+catalog.extra.push(opt(options));
 
 module.exports = {
-  sortBy,
   spankbangCatalogs: [catalog]
 };
