@@ -41,6 +41,7 @@ class SpankbangProvider extends Provider {
           'accept': 'text/html',
           'accept-language': 'en-US,en;q=0.9',
           'referer': 'https://spankbang.com/',
+          'cookie': 'sb=1; age_verified=1;', // ✅ ADDED AGE BYPASS
           'user-agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
         },
@@ -265,6 +266,7 @@ class SpankbangProvider extends Provider {
       const headers = {
         referer: 'https://spankbang.com/',
         origin: 'https://spankbang.com',
+        'cookie': 'sb=1; age_verified=1;', // ✅ ALSO ADDED HERE
         'user-agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
       };
