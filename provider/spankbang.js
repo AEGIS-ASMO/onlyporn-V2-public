@@ -305,7 +305,7 @@ if (!has4k) {
 }
 
       // ALWAYS parse playlist
-      {
+      try{
 
         console.log('🌐 FETCHING PLAYLIST:', masterUrl);
 
