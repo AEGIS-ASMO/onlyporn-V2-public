@@ -6,6 +6,8 @@ const Provider = require('./provider');
 // 🚀 SIMPLE MEMORY CACHE
 const hlsCache = new Map();
 const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
+// 🔥 GLOBAL DEDUPE
+const globalSeen = new Set();
 
 const pathMappings = {
   'trending': '/trending_videos/',
@@ -189,10 +191,25 @@ keyword = keyword.toLowerCase();
 items.each((index, element) => {
   const $e = $(element);
 
-  const link = $e.attr('href'); // ✅ FIXED
+  const link = $e.attr('href');
 
-  if (!link || seen.has(link)) return;
+  if (!link) return;
+
+  // 🔥 1. Skip pinned/top repeated videos
+  if (index < 8 && currentUrl.includes('trending')) return;
+
+  // 🔥 2. Local dedupe (same page)
+  if (seen.has(link)) return;
   seen.add(link);
+ 
+  // ✅ Prevent memory leak
+  if (globalSeen.size > 5000) {
+    globalSeen.clear();
+  }
+
+  // 🔥 3. Global dedupe (across categories)
+  if (globalSeen.has(link)) return;
+  globalSeen.add(link);
       const img = $e.find('img');
 
       let poster =
