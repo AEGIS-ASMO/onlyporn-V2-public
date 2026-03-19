@@ -19,13 +19,6 @@ const pathMappings = {
   'Upcoming': '/upcoming/',
 };
 
-const pathMappings = {
-  'Trending': '/trending_videos/',
-  'New': '/new_videos/',
-  'Popular': '/most_popular/',
-  'Upcoming': '/upcoming/',
-};
-
 class SpankbangProvider extends Provider {
 
   constructor() {
@@ -251,14 +244,14 @@ if (!streams.length) {
         const cached = hlsCache.get(masterUrl);
 
         if (Date.now() - cached.time < CACHE_TTL) {
-          console.log('⚡ CACHE HIT');
+          logger.info('⚡ CACHE HIT');
           streams = cached.streams;
         }
       }
 
       if (!streams.length) {
 
-        console.log('🌐 FETCHING PLAYLIST:', masterUrl);
+        logger.info('🌐 FETCHING PLAYLIST:', masterUrl);
 
         const res = await fetch(masterUrl);
         const text = await res.text();
@@ -349,7 +342,7 @@ if (!streams.length) {
           time: Date.now(),
         });
 
-        console.log('✅ STREAMS READY:', streams);
+        logger.info('✅ STREAMS READY:', streams);
       }
 
     } catch (err) {
@@ -369,7 +362,7 @@ if (!streams.length) {
           type: Provider.TYPE,
         }));
 
-        console.log('MP4 FALLBACK:', streams);
+        logger.info('MP4 FALLBACK:', streams);
       }
     }
 
