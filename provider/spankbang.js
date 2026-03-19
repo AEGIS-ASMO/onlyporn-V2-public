@@ -62,10 +62,6 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
   console.log('🚫 CLOUDFLARE BLOCK');
 }
 
-      if (!html.includes('stream_data') && !html.includes('.m3u8')) {
-  console.log('🚫 REALLY BLOCKED');
-}
-
       return html;
     } catch (error) {
       logger.error(error);
