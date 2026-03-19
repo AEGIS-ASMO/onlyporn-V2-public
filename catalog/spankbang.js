@@ -5,7 +5,7 @@ const opt = options => ({
   options
 });
 
-// ✅ BASE SORTING (NO SEARCH)
+// ✅ BASE SORTING
 const baseCategories = [
   'Trending',
   'New',
@@ -13,15 +13,14 @@ const baseCategories = [
   'Upcoming'
 ];
 
-// ✅ 4K FILTER (VALID COMBOS ONLY)
+// ✅ 4K (VALID ONLY)
 const fourK = [
   '4K (Trending)',
   '4K (New)',
-  '4K (Popular)',
-  '4K (Upcoming)'
+  '4K (Popular)'
 ];
 
-// ✅ HIGH DEMAND SEARCH KEYWORDS
+// ✅ TOP SEARCH KEYWORDS
 const searchGenres = [
   'Milf',
   'Teen',
@@ -36,25 +35,23 @@ const searchGenres = [
   'Creampie'
 ];
 
-// ✅ SEARCH + SORT COMBINATIONS
+// ✅ SEARCH COMBINATIONS
 const searchOptions = [];
 
 const validSorts = ['Trending', 'New', 'Popular'];
 
 for (const genre of searchGenres) {
-  // default (no sort = trending)
-  searchOptions.push(genre);
+  // always explicit
+  searchOptions.push(`${genre} (Trending)`);
 
-  for (const sort of validSorts) {
+  for (const sort of validSorts.slice(1)) {
     searchOptions.push(`${genre} (${sort})`);
   }
 
-  // 🔥 4K variants for search
-  searchOptions.push(`${genre} (4K)`);
-
-  for (const sort of validSorts) {
-    searchOptions.push(`${genre} (4K ${sort})`);
-  }
+  // ✅ 4K only with valid sorts
+  searchOptions.push(`${genre} (4K Trending)`);
+  searchOptions.push(`${genre} (4K New)`);
+  searchOptions.push(`${genre} (4K Popular)`);
 }
 
 // ✅ FINAL OPTIONS
