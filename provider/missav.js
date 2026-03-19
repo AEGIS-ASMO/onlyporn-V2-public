@@ -4,13 +4,13 @@ const { meta } = require('../model');
 const Provider = require('./provider');
 
 const pathMappings = {
-  'Uncensored leak': '/dm548/en/uncensored-leak',
-  'Most viewed today': '/dm228/en/today-hot',
-  'Weekly hot': '/dm146/en/weekly-hot',
-  'Monthly hot': '/dm177/en/monthly-hot',
+  'Uncensored leak': '/dm628/en/uncensored-leak',
+  'Most viewed today': '/dm291/en/today-hot',
+  'Weekly hot': '/dm169/en/weekly-hot',
+  'Monthly hot': '/dm263/en/monthly-hot',
 };
 
-// 🔥 Modern headers (important for MissAV)
+// 🔥 Modern headers
 const HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
@@ -23,40 +23,49 @@ class MissavProvider extends Provider {
 
   constructor() {
     super('https://missav.ws', 'missav', 10);
-    this.dataset = {};
-    this.metas = {};
+    console.log('[MissAV] Provider initialized');
   }
 
   static create() {
     return new MissavProvider();
   }
 
+  // ✅ UPDATED HOME
   getInitialUrl() {
-    return this.baseUrl + '/dm515/en/new';
+    const url = this.baseUrl + '/dm223/en';
+    console.log('[MissAV] Initial URL:', url);
+    return url;
   }
 
   handleSearch({ extra: { search: keyword } }) {
-    return `${this.baseUrl}/search/${keyword}/`;
+    const url = `${this.baseUrl}/search/${keyword}/`;
+    console.log('[MissAV] Search URL:', url);
+    return url;
   }
 
   handleGenre({ extra: { genre } }) {
     const path = pathMappings[genre];
-    return this.baseUrl + path;
+    const url = this.baseUrl + path;
+    console.log('[MissAV] Genre:', genre, '→', url);
+    return url;
   }
 
   handlePagination(url, { extra: { skip } }) {
     const prefix = url.includes('?') ? '&' : '?';
-    return `${prefix}page=${this.page(skip)}`;
+    const paginated = `${prefix}page=${this.page(skip)}`;
+    console.log('[MissAV] Pagination:', paginated);
+    return paginated;
   }
 
   // =========================
-  // 🔥 CATALOG PARSER (UPDATED)
+  // 🔥 CATALOG PARSER
   // =========================
   getCatalogMetas(html) {
+    console.log('[MissAV] Parsing catalog...');
     const metadatas = [];
     const $ = load(html);
 
-    $('a[href*="/en/"]').each((_, el) => {
+    $('a[href*="/en/"]').each((i, el) => {
       const href = $(el).attr('href');
       const title = $(el).text().trim();
       const poster =
@@ -64,6 +73,8 @@ class MissavProvider extends Provider {
         $(el).find('img').attr('src');
 
       if (!href || !title) return;
+
+      console.log('[MissAV] Found item:', title);
 
       metadatas.push(
         new meta.MetaPreview(
@@ -75,68 +86,84 @@ class MissavProvider extends Provider {
       );
     });
 
+    console.log('[MissAV] Total metas:', metadatas.length);
     return metadatas;
   }
 
   async getMetadata(args) {
+    console.log('[MissAV] Fetching metadata for:', args.id);
     return super.getMetadata(args)
       .then(meta => meta.metaResponse);
   }
 
   // =========================
-  // 🔥 VIDEO PAGE PARSER (MAJOR UPGRADE)
+  // 🔥 VIDEO PAGE PARSER
   // =========================
   parseVideoPage({ id, html }) {
+    console.log('\n[MissAV] ===========================');
+    console.log('[MissAV] Parsing video:', id);
+
     const $ = load(html);
 
-    // ---- META ----
     const metaMap = {};
     $('meta').each((_, e) => {
       const attribs = e.attribs;
       metaMap[attribs.name || attribs.property] = attribs.content;
     });
 
+    console.log('[MissAV] Title:', metaMap['og:title']);
+
     let streams = [];
 
     // =========================
-    // 1. 🔥 DIRECT M3U8 (NEW)
+    // 1. M3U8
     // =========================
     const m3u8Matches = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/g);
     if (m3u8Matches) {
+      console.log('[MissAV] M3U8 found:', m3u8Matches.length);
       streams.push(...m3u8Matches.map(url => ({
         url,
         name: 'HLS'
       })));
+    } else {
+      console.log('[MissAV] No M3U8 found');
     }
 
     // =========================
-    // 2. 🔥 MP4 FALLBACK
+    // 2. MP4
     // =========================
     const mp4Matches = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/g);
     if (mp4Matches) {
+      console.log('[MissAV] MP4 found:', mp4Matches.length);
       streams.push(...mp4Matches.map(url => ({
         url,
         name: 'MP4'
       })));
+    } else {
+      console.log('[MissAV] No MP4 found');
     }
 
     // =========================
-    // 3. 🔥 IFRAME EXTRACTION
+    // 3. IFRAME
     // =========================
     const iframe = $('iframe').attr('src');
     if (iframe) {
+      console.log('[MissAV] Iframe found:', iframe);
       streams.push({
         url: iframe,
         name: 'iframe',
         isExternal: true
       });
+    } else {
+      console.log('[MissAV] No iframe found');
     }
 
     // =========================
-    // 4. 🔥 JSON PLAYER DATA
+    // 4. JSON
     // =========================
     const jsonMatch = html.match(/window\.__DATA__\s*=\s*(\{.*?\});/);
     if (jsonMatch) {
+      console.log('[MissAV] JSON data found');
       try {
         const json = JSON.parse(jsonMatch[1]);
         const videoUrl =
@@ -145,24 +172,29 @@ class MissavProvider extends Provider {
           json?.stream;
 
         if (videoUrl) {
+          console.log('[MissAV] JSON stream:', videoUrl);
           streams.push({
             url: videoUrl,
             name: 'JSON'
           });
         }
       } catch (e) {
-        logger.warn('MissAV JSON parse failed');
+        console.log('[MissAV] JSON parse error');
       }
+    } else {
+      console.log('[MissAV] No JSON player data');
     }
 
     // =========================
-    // 5. 🔥 LEGACY SURRIT (YOUR OLD METHOD)
+    // 5. LEGACY
     // =========================
     try {
       const regex = /urls:\s*\[(.*?)\]/;
       const match = html.match(regex);
 
       if (match && match[1]) {
+        console.log('[MissAV] Legacy pattern found');
+
         const text = match[1].split(',')[1];
         const leftPat = 'sixyik.com\\/';
         const left = text.indexOf(leftPat);
@@ -174,6 +206,8 @@ class MissavProvider extends Provider {
 
           const legacyUrl = `https://surrit.com/${uuid}/playlist.m3u8`;
 
+          console.log('[MissAV] Legacy stream:', legacyUrl);
+
           streams.push({
             url: legacyUrl,
             name: 'Legacy HLS'
@@ -181,17 +215,20 @@ class MissavProvider extends Provider {
         }
       }
     } catch (e) {
-      logger.warn('Legacy extraction failed');
+      console.log('[MissAV] Legacy extraction failed');
     }
 
     // =========================
-    // 6. 🔥 LAST RESORT SCAN
+    // 6. FALLBACK
     // =========================
     if (streams.length === 0) {
+      console.log('[MissAV] Running fallback scan...');
+
       const fallback = html.match(/https?:\/\/[^"' ]+/g) || [];
 
       fallback.forEach(url => {
         if (url.includes('.m3u8') || url.includes('.mp4')) {
+          console.log('[MissAV] Fallback stream:', url);
           streams.push({
             url,
             name: 'Fallback'
@@ -201,7 +238,7 @@ class MissavProvider extends Provider {
     }
 
     // =========================
-    // 🧹 REMOVE DUPLICATES
+    // REMOVE DUPES
     // =========================
     const seen = new Set();
     streams = streams.filter(s => {
@@ -210,9 +247,8 @@ class MissavProvider extends Provider {
       return true;
     });
 
-    // =========================
-    // 🎬 META RESPONSE
-    // =========================
+    console.log('[MissAV] Final streams count:', streams.length);
+
     const metaResponse = new meta.MetaResponse(
       id,
       Provider.TYPE,
@@ -233,19 +269,10 @@ class MissavProvider extends Provider {
     };
   }
 
-  // =========================
-  // 🔥 STREAM TRANSFORM (UPDATED)
-  // =========================
   transformStream(url, stream) {
-    if (stream.isExternal) return stream;
+    console.log('[MissAV] Transforming stream:', stream.url);
 
-    // Fix relative HLS segments
-    if (stream.url.includes('playlist.m3u8')) {
-      return {
-        ...stream,
-        url: stream.url,
-      };
-    }
+    if (stream.isExternal) return stream;
 
     return stream;
   }
