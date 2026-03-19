@@ -228,8 +228,11 @@ if (!streams.length) {
   if (m3u8Match) {
     const masterUrl = m3u8Match[0];
 
+let forced4kStream = null;
+
     try {
-// 🔥 FORCE 4K DISCOVERY
+// 🔥 FORCE 4K DISCOVERY (AFTER masterUrl is found)
+
 const idMatch = masterUrl.match(/\/(\d+)-/);
 
 if (idMatch) {
@@ -238,22 +241,35 @@ if (idMatch) {
   const base = masterUrl.split('/hls/')[0] + '/hls/';
   const pathParts = masterUrl.split('/hls/')[1].split('/');
 
-  // rebuild path like: 1/6/
   const folderPath = pathParts.slice(0, 2).join('/');
 
   const forced4kUrl = `${base}${folderPath}/${videoId}-4k.mp4/index-v1-a1.m3u8`;
 
   try {
-    const res = await fetch(forced4kUrl, { method: 'HEAD' });
+    const res = await fetch(forced4kUrl, {
+      method: 'HEAD',
+      headers: {
+        'referer': 'https://spankbang.com/',
+        'origin': 'https://spankbang.com',
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+      },
+    });
+
+
 
     if (res.ok) {
       console.log('🔥 4K FOUND:', forced4kUrl);
 
-      streams.unshift({
+      forced4kStream = {
         name: '2160p 4K',
         url: forced4kUrl,
         type: Provider.TYPE,
-      });
+        headers: {
+          referer: 'https://spankbang.com/',
+          origin: 'https://spankbang.com',
+        },
+      };
     }
   } catch (err) {
     console.log('❌ No 4K stream');
@@ -262,15 +278,34 @@ if (idMatch) {
 
       // ⚡ CACHE HIT
       if (hlsCache.has(masterUrl)) {
-        const cached = hlsCache.get(masterUrl);
+  const cached = hlsCache.get(masterUrl);
 
-        if (Date.now() - cached.time < CACHE_TTL) {
-          console.log('⚡ CACHE HIT');
-          streams = cached.streams;
-        }
-      }
+  if (Date.now() - cached.time < CACHE_TTL) {
+    console.log('⚡ CACHE HIT');
 
-      if (!streams.length) {
+    let cachedStreams = [...cached.streams];
+
+    // 🔥 Inject 4K even on cache hit
+    if (forced4kStream && !cachedStreams.some(s => s.name.includes('2160'))) {
+      cachedStreams.unshift(forced4kStream);
+    }
+
+    return new meta.MetaResponse(
+      url,
+      'movie',
+      title,
+      {
+        streams: cachedStreams,
+        poster,
+        background: poster,
+        description,
+      },
+    );
+  }
+}
+
+      // ALWAYS parse playlist
+      {
 
         console.log('🌐 FETCHING PLAYLIST:', masterUrl);
 
@@ -367,11 +402,16 @@ if (/2160|4k/i.test(streamUrl)) {
             })].filter(Boolean)
           : variants.map(({ height, bitrate, isHDR, isDV, codec, ...rest }) => rest);
 
+// 🔥 Inject forced 4K at top
+if (forced4kStream) {
+  streams.unshift(forced4kStream);
+}
+
         // 💾 SAVE CACHE
         hlsCache.set(masterUrl, {
-          streams,
-          time: Date.now(),
-        });
+  streams,
+  time: Date.now(),
+});
 
         console.log('✅ STREAMS READY:', streams);
       }
