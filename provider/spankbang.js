@@ -276,6 +276,7 @@ if (!has4k) {
   }
 }
 
+
       // ⚡ CACHE HIT
       if (hlsCache.has(masterUrl)) {
   const cached = hlsCache.get(masterUrl);
@@ -305,7 +306,7 @@ if (!has4k) {
 }
 
       // ALWAYS parse playlist
-      try{
+      try {
 
         console.log('🌐 FETCHING PLAYLIST:', masterUrl);
 
@@ -421,7 +422,7 @@ if (forced4kStream) {
         console.log('✅ STREAMS READY:', streams);
       }
 
-    } catch (err) {
+     catch (err) {
       logger.warn({ err }, '⚠️ HLS parsing failed');
     }
   }
