@@ -22,9 +22,9 @@ const HEADERS = {
 class MissavProvider extends Provider {
 
   constructor() {
-    super('https://missav.ws', 'missav', 10);
-    console.log('[MissAV] Provider initialized');
-  }
+  super('https://missav.ai', 'missav', 10); // 🔥 SWITCH DOMAIN
+  console.log('[MissAV] Provider initialized with domain:', this.baseUrl);
+}
 
   static create() {
     return new MissavProvider();
