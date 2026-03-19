@@ -130,19 +130,13 @@ class SpankbangProvider extends Provider {
 
       // 🔥 Upgrade thumbnail quality
       if (poster) {
-        try {
-          const u = new URL(poster);
-          u.pathname = u.pathname
-            .replace(/\/small\//, '/large/')
-            .replace(/\/medium\//, '/large/')
-            .replace(/\/thumbs\//, '/thumbs/large/');
-          poster = u.toString();
-        } catch {
-          poster = poster
-            .replace('/small/', '/large/')
-            .replace('/medium/', '/large/')
-            .replace('/thumbs/', '/thumbs/large/');
-        }
+  poster = poster
+    .replace('/small/', '/large/')
+    .replace('/medium/', '/large/')
+    .replace('/thumbs/', '/thumbs/large/')
+    .replace('/thumbs/large/', '/thumbs/large_hd/')
+    .replace('/thumbs/large_hd/', '/thumbs/full/');
+}
       }
 
       const title =
@@ -346,20 +340,37 @@ if (!streams.length) {
   }
 }
 
-    // 🔥 MP4 fallback (SAFE)
-    if (!streams.length) {
-      const urls = scripts.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/g);
+    // 🔥 SMART MP4 EXTRACTION (WITH 4K DETECTION)
+if (!streams.length) {
+  const urls = scripts.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/g);
 
-      if (urls && urls.length) {
-        streams = urls.map(u => ({
-          name: 'mp4',
-          url: u,
-          type: Provider.TYPE,
-        }));
+  if (urls && urls.length) {
 
-        console.log('MP4 FALLBACK:', streams);
-      }
-    }
+    const variants = urls.map(u => {
+      let quality = 'mp4';
+
+      if (u.includes('2160') || u.includes('4k')) quality = '2160p';
+      else if (u.includes('1080')) quality = '1080p';
+      else if (u.includes('720')) quality = '720p';
+
+      return {
+        name: `📦 ${quality}`,
+        url: u,
+        type: Provider.TYPE,
+      };
+    });
+
+    // sort best first
+    variants.sort((a, b) => {
+      const getQ = q => parseInt(q.match(/\d+/)) || 0;
+      return getQ(b.name) - getQ(a.name);
+    });
+
+    streams = variants;
+
+    console.log('🎯 MP4 STREAMS:', streams);
+  }
+}
 
     if (!streams.length) {
       logger.warn('⚠️ No streams found');
