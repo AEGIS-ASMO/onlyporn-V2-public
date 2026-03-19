@@ -3,6 +3,13 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
+// 🚀 SIMPLE CACHE (same idea as spankbang)
+const hlsCache = new Map();
+const CACHE_TTL = 1000 * 60 * 10;
+
+// =========================
+// 🔥 PATHS
+// =========================
 const pathMappings = {
   'Uncensored leak': '/dm628/en/uncensored-leak',
   'Most viewed today': '/dm291/en/today-hot',
@@ -10,228 +17,231 @@ const pathMappings = {
   'Monthly hot': '/dm263/en/monthly-hot',
 };
 
-// 🔥 Modern headers
+// =========================
+// 🔥 REAL BROWSER HEADERS
+// =========================
 const HEADERS = {
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
-  'Accept-Language': 'en-US,en;q=0.9',
-  Referer: 'https://missav.ws',
-  Origin: 'https://missav.ws',
+  'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'accept-language': 'en-US,en;q=0.9',
+  'cache-control': 'no-cache',
+  'pragma': 'no-cache',
+  'upgrade-insecure-requests': '1',
+  'referer': 'https://missav.ai/',
+  'origin': 'https://missav.ai',
+  'cookie': 'age_verified=1; hasVisited=1;',
+  'sec-fetch-site': 'same-origin',
+  'sec-fetch-mode': 'navigate',
+  'sec-fetch-user': '?1',
+  'sec-fetch-dest': 'document',
+  'user-agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
 };
 
 class MissavProvider extends Provider {
 
   constructor() {
-  super('https://missav.ai', 'missav', 10); // 🔥 SWITCH DOMAIN
-  console.log('[MissAV] Provider initialized with domain:', this.baseUrl);
-}
+    super('https://missav.ai', 'missav', 10);
+    console.log('[MissAV] Provider initialized with domain:', this.baseUrl);
+  }
 
   static create() {
     return new MissavProvider();
   }
 
-  // ✅ UPDATED HOME
+  // =========================
+  // ✅ FETCH (SPANKBANG STYLE)
+  // =========================
+  async fetchHtml(url) {
+    logger.info({ url }, '[MissAV] fetching');
+
+    try {
+      const res = await fetch(url, { headers: HEADERS });
+      const html = await res.text();
+
+      // 🚫 Cloudflare detection
+      if (
+        html.includes('cf-chl') ||
+        html.includes('Just a moment') ||
+        html.includes('Attention Required')
+      ) {
+        console.log('🚫 CLOUDFLARE BLOCKED');
+
+        // retry once with slight variation
+        const retry = await fetch(url + '?_=' + Date.now(), {
+          headers: HEADERS,
+        });
+        return await retry.text();
+      }
+
+      return html;
+    } catch (err) {
+      logger.error(err);
+      return '';
+    }
+  }
+
   getInitialUrl() {
-    const url = this.baseUrl + '/dm223/en';
-    console.log('[MissAV] Initial URL:', url);
-    return url;
+    return this.baseUrl + '/dm223/en';
   }
 
   handleSearch({ extra: { search: keyword } }) {
-    const url = `${this.baseUrl}/search/${keyword}/`;
-    console.log('[MissAV] Search URL:', url);
-    return url;
+    return `${this.baseUrl}/search/${encodeURIComponent(keyword)}/`;
   }
 
   handleGenre({ extra: { genre } }) {
-    const path = pathMappings[genre];
-    const url = this.baseUrl + path;
-    console.log('[MissAV] Genre:', genre, '→', url);
-    return url;
+    return this.baseUrl + (pathMappings[genre] || '/dm223/en');
   }
 
   handlePagination(url, { extra: { skip } }) {
-    const prefix = url.includes('?') ? '&' : '?';
-    const paginated = `${prefix}page=${this.page(skip)}`;
-    console.log('[MissAV] Pagination:', paginated);
-    return paginated;
+    const page = this.page(skip);
+    return `${url}?page=${page}`;
   }
 
   // =========================
-  // 🔥 CATALOG PARSER
+  // 🔥 CATALOG
   // =========================
   getCatalogMetas(html) {
-    console.log('[MissAV] Parsing catalog...');
-    const metadatas = [];
     const $ = load(html);
+    const list = [];
+    const seen = new Set();
 
     $('a[href*="/en/"]').each((i, el) => {
       const href = $(el).attr('href');
       const title = $(el).text().trim();
+
+      if (!href || !title || seen.has(href)) return;
+      seen.add(href);
+
       const poster =
         $(el).find('img').attr('data-src') ||
         $(el).find('img').attr('src');
 
-      if (!href || !title) return;
-
-      console.log('[MissAV] Found item:', title);
-
-      metadatas.push(
+      list.push(
         new meta.MetaPreview(
-          href.replace(this.baseUrl, ''),
+          href,
           'movie',
           title,
-          poster
+          poster,
+          { videoPageUrl: href }
         )
       );
     });
 
-    console.log('[MissAV] Total metas:', metadatas.length);
-    return metadatas;
+    console.log('[MissAV] Catalog count:', list.length);
+    return list;
   }
 
   async getMetadata(args) {
-    console.log('[MissAV] Fetching metadata for:', args.id);
-    return super.getMetadata(args)
-      .then(meta => meta.metaResponse);
+    const html = await this.fetchHtml(args.id);
+    return this.parseVideoPage({ id: args.id, html }).metaResponse;
   }
 
   // =========================
-  // 🔥 VIDEO PAGE PARSER
+  // 🔥 VIDEO PARSER
   // =========================
-  parseVideoPage({ id, html }) {
-    console.log('\n[MissAV] ===========================');
-    console.log('[MissAV] Parsing video:', id);
-
+  async parseVideoPage({ id, html }) {
     const $ = load(html);
 
-    const metaMap = {};
-    $('meta').each((_, e) => {
-      const attribs = e.attribs;
-      metaMap[attribs.name || attribs.property] = attribs.content;
-    });
+    const title =
+      $('meta[property="og:title"]').attr('content') || 'MissAV';
+    const poster =
+      $('meta[property="og:image"]').attr('content');
 
-    console.log('[MissAV] Title:', metaMap['og:title']);
+    const description =
+      $('meta[property="og:description"]').attr('content') || title;
 
     let streams = [];
 
     // =========================
-    // 1. M3U8
+    // 1. DIRECT M3U8
     // =========================
-    const m3u8Matches = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/g);
-    if (m3u8Matches) {
-      console.log('[MissAV] M3U8 found:', m3u8Matches.length);
-      streams.push(...m3u8Matches.map(url => ({
-        url,
-        name: 'HLS'
-      })));
-    } else {
-      console.log('[MissAV] No M3U8 found');
+    const m3u8 = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/g);
+    if (m3u8) {
+      streams.push(
+        ...m3u8.map(url => ({
+          url,
+          name: 'HLS',
+          type: Provider.TYPE,
+          headers: {
+            referer: 'https://missav.ai/',
+            origin: 'https://missav.ai',
+            'user-agent': HEADERS['user-agent'],
+          },
+        }))
+      );
     }
 
     // =========================
     // 2. MP4
     // =========================
-    const mp4Matches = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/g);
-    if (mp4Matches) {
-      console.log('[MissAV] MP4 found:', mp4Matches.length);
-      streams.push(...mp4Matches.map(url => ({
-        url,
-        name: 'MP4'
-      })));
-    } else {
-      console.log('[MissAV] No MP4 found');
+    const mp4 = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/g);
+    if (mp4) {
+      streams.push(
+        ...mp4.map(url => ({
+          url,
+          name: 'MP4',
+          type: Provider.TYPE,
+        }))
+      );
     }
 
     // =========================
-    // 3. IFRAME
-    // =========================
-    const iframe = $('iframe').attr('src');
-    if (iframe) {
-      console.log('[MissAV] Iframe found:', iframe);
-      streams.push({
-        url: iframe,
-        name: 'iframe',
-        isExternal: true
-      });
-    } else {
-      console.log('[MissAV] No iframe found');
-    }
-
-    // =========================
-    // 4. JSON
+    // 3. JSON DATA
     // =========================
     const jsonMatch = html.match(/window\.__DATA__\s*=\s*(\{.*?\});/);
     if (jsonMatch) {
-      console.log('[MissAV] JSON data found');
       try {
         const json = JSON.parse(jsonMatch[1]);
+
         const videoUrl =
           json?.video?.hls ||
           json?.video?.mp4 ||
           json?.stream;
 
         if (videoUrl) {
-          console.log('[MissAV] JSON stream:', videoUrl);
           streams.push({
             url: videoUrl,
-            name: 'JSON'
+            name: 'JSON',
+            type: Provider.TYPE,
           });
         }
-      } catch (e) {
-        console.log('[MissAV] JSON parse error');
-      }
-    } else {
-      console.log('[MissAV] No JSON player data');
+      } catch {}
     }
 
     // =========================
-    // 5. LEGACY
+    // 4. LEGACY (important)
     // =========================
     try {
-      const regex = /urls:\s*\[(.*?)\]/;
-      const match = html.match(regex);
-
+      const match = html.match(/urls:\s*\[(.*?)\]/);
       if (match && match[1]) {
-        console.log('[MissAV] Legacy pattern found');
+        const text = match[1];
+        const uuidMatch = text.match(/sixyik\.com\\\/([^\\/]+)/);
 
-        const text = match[1].split(',')[1];
-        const leftPat = 'sixyik.com\\/';
-        const left = text.indexOf(leftPat);
-
-        if (left !== -1) {
-          const uuid = text
-            .substring(left + leftPat.length)
-            .replace('\\/seek\\/_1.jpg"', '');
-
-          const legacyUrl = `https://surrit.com/${uuid}/playlist.m3u8`;
-
-          console.log('[MissAV] Legacy stream:', legacyUrl);
+        if (uuidMatch) {
+          const uuid = uuidMatch[1];
+          const legacy = `https://surrit.com/${uuid}/playlist.m3u8`;
 
           streams.push({
-            url: legacyUrl,
-            name: 'Legacy HLS'
+            url: legacy,
+            name: 'Legacy',
+            type: Provider.TYPE,
           });
         }
       }
-    } catch (e) {
-      console.log('[MissAV] Legacy extraction failed');
-    }
+    } catch {}
 
     // =========================
-    // 6. FALLBACK
+    // 5. FALLBACK SCAN
     // =========================
-    if (streams.length === 0) {
-      console.log('[MissAV] Running fallback scan...');
-
+    if (!streams.length) {
       const fallback = html.match(/https?:\/\/[^"' ]+/g) || [];
 
       fallback.forEach(url => {
         if (url.includes('.m3u8') || url.includes('.mp4')) {
-          console.log('[MissAV] Fallback stream:', url);
           streams.push({
             url,
-            name: 'Fallback'
+            name: 'Fallback',
+            type: Provider.TYPE,
           });
         }
       });
@@ -247,33 +257,17 @@ class MissavProvider extends Provider {
       return true;
     });
 
-    console.log('[MissAV] Final streams count:', streams.length);
+    console.log('[MissAV] Streams found:', streams.length);
 
-    const metaResponse = new meta.MetaResponse(
-      id,
-      Provider.TYPE,
-      metaMap['og:title'],
-      {
-        background: metaMap['og:image'],
-        description:
-          metaMap['og:description'] || metaMap['og:title'],
-        genres: metaMap['keywords']
-          ? metaMap['keywords'].split(',')
-          : [],
-      }
-    );
-
-    return {
-      metaResponse,
+    return new meta.MetaResponse(id, 'movie', title, {
       streams,
-    };
+      poster,
+      background: poster,
+      description,
+    });
   }
 
   transformStream(url, stream) {
-    console.log('[MissAV] Transforming stream:', stream.url);
-
-    if (stream.isExternal) return stream;
-
     return stream;
   }
 }
