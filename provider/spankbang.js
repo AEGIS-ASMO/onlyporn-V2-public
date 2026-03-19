@@ -74,52 +74,80 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
 
   if (!genre) return this.getInitialUrl();
 
-  const [rawKeyword, rawOrder] = genre.split('(');
+  let keyword = '';
+  let order = '';
+  let is4k = false;
 
-  const keyword = rawKeyword.trim();
-  const order = rawOrder?.replace(')', '').toLowerCase();
+  // ✅ Extract parts safely
+  if (genre.includes('(')) {
+    const [base, inside] = genre.split('(');
+    keyword = base.trim();
+
+    const parts = inside.replace(')', '').split(' ');
+
+    parts.forEach(p => {
+      const val = p.toLowerCase();
+
+      if (val === '4k') is4k = true;
+      else order = val;
+    });
+
+  } else {
+    keyword = genre.trim();
+  }
 
   let url;
 
   const isBaseCategory = pathMappings[keyword];
-  const is4k = keyword.toLowerCase().includes('4k');
 
-  // ✅ CASE 1: BASE CATEGORY (Trending/New/etc)
+  // =========================
+  // ✅ CASE 1: BASE CATEGORY
+  // =========================
   if (isBaseCategory) {
     url = this.baseUrl + pathMappings[keyword];
 
-    if (order) {
-      const u = new URL(url);
+    const u = new URL(url);
 
-      if (order === 'new') u.searchParams.set('o', 'new');
-      if (order === 'popular') u.searchParams.set('o', 'popular');
-
-      url = u.toString();
+    if (order && order !== 'trending') {
+      u.searchParams.set('o', order);
     }
+
+    if (is4k) {
+      u.searchParams.set('q', 'uhd');
+    }
+
+    url = u.toString();
   }
 
-  // ✅ CASE 2: 4K ONLY (no keyword search)
-  else if (is4k && !order) {
+  // =========================
+  // ✅ CASE 2: PURE 4K (no keyword)
+  // =========================
+  else if (keyword.toLowerCase() === '4k') {
     url = this.baseUrl + pathMappings.Trending;
 
     const u = new URL(url);
     u.searchParams.set('q', 'uhd');
 
+    if (order && order !== 'trending') {
+      u.searchParams.set('o', order);
+    }
+
     url = u.toString();
   }
 
-  // ✅ CASE 3: KEYWORD SEARCH (milf, teens, etc)
+  // =========================
+  // ✅ CASE 3: SEARCH KEYWORD
+  // =========================
   else {
     url = `${this.baseUrl}/s/${encodeURIComponent(keyword.toLowerCase())}/`;
 
     const u = new URL(url);
 
-    if (order) {
+    if (order && order !== 'trending') {
       u.searchParams.set('o', order);
     }
 
-    // 4K filter inside keyword
-    if (genre.toLowerCase().includes('4k')) {
+    if (is4k) {
       u.searchParams.set('q', 'uhd');
     }
 
@@ -131,16 +159,27 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
 }
 
   handlePagination(url, { extra: { skip } }) {
-    const page = this.page(skip);
-    const u = new URL(url);
-    return url.replace(/\/$/, '') + `/${page}/`;
+  const page = this.page(skip);
+  if (!page) return url;
+
+  const u = new URL(url);
+
+  // SpankBang uses /{page}/ AFTER path, BEFORE query
+  let base = u.origin + u.pathname.replace(/\/$/, '');
+  let final = `${base}/${page}/`;
+
+  if (u.search) {
+    final += u.search;
   }
+
+  return final;
+}
 
   getCatalogMetas(html, currentUrl) {
     const metadataList = [];
     const $ = load(html);
 
-    const items = $('a[href^="/"][href*="/video"]');
+    const items = $('a.thumb, a.video-item, .video-item a, a[href*="/video"]');
 
     const seen = new Set();
 
@@ -154,9 +193,10 @@ items.each((index, element) => {
       const img = $e.find('img');
 
       let poster =
-        img.attr('data-src') ||
-        img.attr('src') ||
-        img.attr('data-preview');
+  img.attr('data-src') ||
+  img.attr('data-original') ||
+  img.attr('src') ||
+  img.attr('data-preview');
 
       if (poster) {
         poster = poster
@@ -170,9 +210,10 @@ items.each((index, element) => {
       }
 
       const title =
-        img.attr('alt') ||
-        $e.find('.n').text() ||
-        $e.attr('title');
+  img.attr('alt') ||
+  $e.attr('title') ||
+  $e.find('.n').text() ||
+  $e.text().trim();
 
       if (!link || !title) return;
 
