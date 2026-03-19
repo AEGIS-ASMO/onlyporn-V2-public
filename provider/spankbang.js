@@ -107,8 +107,7 @@ class SpankbangProvider extends Provider {
   handlePagination(url, { extra: { skip } }) {
     const page = this.page(skip);
     const u = new URL(url);
-    u.searchParams.set('page', page);
-    return u.toString();
+    return url.replace(/\/$/, '') + `/${page}/`;
   }
 
   getCatalogMetas(html) {
@@ -117,9 +116,15 @@ class SpankbangProvider extends Provider {
 
     const items = $('a[href^="/"][class*="video"]');
 
-    items.each((index, element) => {
-      const $e = $(element);
-      const link = $e.find('a').attr('href');
+    const seen = new Set();
+
+items.each((index, element) => {
+  const $e = $(element);
+
+  const link = $e.attr('href'); // ✅ FIXED
+
+  if (!link || seen.has(link)) return;
+  seen.add(link);
       const img = $e.find('img');
 
       let poster =
