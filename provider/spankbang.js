@@ -3,6 +3,22 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
+const { load } = require('cheerio');
+const logger = require('../logger');
+const { meta } = require('../model');
+const Provider = require('./provider');
+
+// 🚀 SIMPLE MEMORY CACHE (PUT HERE)
+const hlsCache = new Map();
+const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
+
+const pathMappings = {
+  'Trending': '/trending_videos/',
+  'New': '/new_videos/',
+  'Popular': '/most_popular/',
+  'Upcoming': '/upcoming/',
+};
+
 const pathMappings = {
   'Trending': '/trending_videos/',
   'New': '/new_videos/',
@@ -221,103 +237,126 @@ class SpankbangProvider extends Provider {
       }
     }
 
-    // 🚀 ADVANCED HLS PARSER
-    if (!streams.length) {
-      const m3u8Match = scripts.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+    // 🚀 ULTRA OPTIMIZED HLS PARSER
+if (!streams.length) {
+  const m3u8Match = scripts.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
 
-      if (m3u8Match) {
-        const masterUrl = m3u8Match[0];
+  if (m3u8Match) {
+    const masterUrl = m3u8Match[0];
 
-        try {
-          console.log('MASTER PLAYLIST:', masterUrl);
+    try {
 
-          const res = await fetch(masterUrl);
-          const text = await res.text();
+      // ⚡ CACHE HIT
+      if (hlsCache.has(masterUrl)) {
+        const cached = hlsCache.get(masterUrl);
 
-          const lines = text.split('\n');
-          const variants = [];
+        if (Date.now() - cached.time < CACHE_TTL) {
+          console.log('⚡ CACHE HIT');
+          streams = cached.streams;
+        }
+      }
 
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
+      if (!streams.length) {
 
-            if (line.includes('#EXT-X-STREAM-INF')) {
+        console.log('🌐 FETCHING PLAYLIST:', masterUrl);
 
-              const resolutionMatch = line.match(/RESOLUTION=\d+x(\d+)/);
-              const height = resolutionMatch ? parseInt(resolutionMatch[1]) : 0;
+        const res = await fetch(masterUrl);
+        const text = await res.text();
 
-              const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/);
-              const bitrate = bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0;
+        const lines = text.split('\n');
+        const variants = [];
 
-              let codec = 'AVC';
-              if (/hev1|hvc1/i.test(line)) codec = 'HEVC';
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
 
-              let isHDR = false;
-              let isDV = false;
+          if (line.includes('#EXT-X-STREAM-INF')) {
 
-              if (line.includes('VIDEO-RANGE=PQ') || line.includes('VIDEO-RANGE=HLG')) {
-                isHDR = true;
-              }
+            const resolutionMatch = line.match(/RESOLUTION=\d+x(\d+)/);
+            const height = resolutionMatch ? parseInt(resolutionMatch[1]) : 0;
 
-              if (/hdr/i.test(line)) isHDR = true;
+            const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/);
+            const bitrate = bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0;
 
-              if (/dvhe|dvh1|dolby/i.test(line)) {
+            let codec = /hev1|hvc1/i.test(line) ? 'HEVC' : 'AVC';
+
+            let isHDR = /VIDEO-RANGE=PQ|VIDEO-RANGE=HLG|hdr/i.test(line);
+            let isDV = /dvhe|dvh1|dolby/i.test(line);
+
+            const nextLine = lines[i + 1];
+
+            if (nextLine) {
+              let streamUrl = new URL(nextLine, masterUrl).toString();
+
+              if (/hdr|hlg/i.test(streamUrl)) isHDR = true;
+              if (/dv|dolby/i.test(streamUrl)) {
                 isDV = true;
                 isHDR = true;
               }
 
-              const nextLine = lines[i + 1];
+              // 🚨 FAKE 4K DETECTION
+              let realHeight = height;
+              
 
-              if (nextLine) {
-                let streamUrl = new URL(nextLine, masterUrl).toString();
+              let name = realHeight ? `${realHeight}p` : 'Auto';
 
-                if (/hdr|hlg/i.test(streamUrl)) isHDR = true;
-                if (/dv|dolby/i.test(streamUrl)) {
-                  isDV = true;
-                  isHDR = true;
-                }
-                if (/hevc|h265/i.test(streamUrl)) codec = 'HEVC';
+              if (isDV) name += ' DV';
+              else if (isHDR) name += ' HDR';
 
-                let name = height ? `${height}p` : 'Auto';
+              name += ` ${codec}`;
 
-                if (isDV) name += ' DV';
-                else if (isHDR) name += ' HDR';
-
-                name += ` ${codec}`;
-
-                if (bitrate) {
-                  const mbps = (bitrate / 1000000).toFixed(1);
-                  name += ` ${mbps}Mbps`;
-                }
-
-                variants.push({
-                  name,
-                  url: streamUrl,
-                  type: Provider.TYPE,
-                  height,
-                  bitrate,
-                  isHDR,
-                  isDV,
-                  codec,
-                });
+              if (bitrate) {
+                const mbps = (bitrate / 1000000).toFixed(1);
+                name += ` ${mbps}Mbps`;
               }
+
+              variants.push({
+                name,
+                url: streamUrl,
+                type: Provider.TYPE,
+                height: realHeight,
+                bitrate,
+                isHDR,
+                isDV,
+                codec,
+              });
             }
           }
-
-          streams = variants.sort((a, b) => {
-            if (b.height !== a.height) return b.height - a.height;
-            if (b.isDV !== a.isDV) return b.isDV - a.isDV;
-            if (b.isHDR !== a.isHDR) return b.isHDR - a.isHDR;
-            if (b.codec !== a.codec) return b.codec === 'HEVC' ? 1 : -1;
-            return b.bitrate - a.bitrate;
-          }).map(({ height, bitrate, isHDR, isDV, codec, ...rest }) => rest);
-
-          console.log('FINAL STREAMS:', streams);
-
-        } catch (err) {
-          logger.warn({ err }, '⚠️ Failed parsing m3u8');
         }
+
+        // 🧠 SMART SORT
+        variants.sort((a, b) => {
+          if (b.height !== a.height) return b.height - a.height;
+          if (b.isDV !== a.isDV) return b.isDV - a.isDV;
+          if (b.isHDR !== a.isHDR) return b.isHDR - a.isHDR;
+          if (b.codec !== a.codec) return b.codec === 'HEVC' ? 1 : -1;
+          return b.bitrate - a.bitrate;
+        });
+
+        // 🎯 OPTION: BEST STREAM ONLY
+        const BEST_ONLY = false;
+
+        streams = BEST_ONLY
+          ? [((variants[0]) && {
+              name: '🔥 Best Quality',
+              url: variants[0].url,
+              type: Provider.TYPE,
+            })].filter(Boolean)
+          : variants.map(({ height, bitrate, isHDR, isDV, codec, ...rest }) => rest);
+
+        // 💾 SAVE CACHE
+        hlsCache.set(masterUrl, {
+          streams,
+          time: Date.now(),
+        });
+
+        console.log('✅ STREAMS READY:', streams);
       }
+
+    } catch (err) {
+      logger.warn({ err }, '⚠️ HLS parsing failed');
     }
+  }
+}
 
     // 🔥 MP4 fallback (SAFE)
     if (!streams.length) {
