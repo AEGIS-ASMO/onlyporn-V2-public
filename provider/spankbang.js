@@ -25,8 +25,8 @@ class SpankbangProvider extends Provider {
   }
 
   getInitialUrl() {
-    return this.baseUrl + pathMappings.Trending;
-  }
+  return this.baseUrl + pathMappings.trending;
+}
 
   handleSearch({ extra: { search: keyword } }) {
     return `${this.baseUrl}/s/${encodeURIComponent(keyword)}/`;
@@ -81,7 +81,7 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
   // ✅ Extract parts safely
   if (genre.includes('(')) {
     const [base, inside] = genre.split('(');
-    keyword = base.trim().toLowerCase();
+    keyword = base.trim();
 
     const parts = inside.replace(')', '').split(' ');
 
@@ -125,8 +125,8 @@ keyword = keyword.toLowerCase();
   // =========================
   // ✅ CASE 2: PURE 4K (no keyword)
   // =========================
-  else if (keyword === '4k' || keyword.includes('4k')) {
-    url = this.baseUrl + pathMappings.Trending;
+  else if (keyword === '4k') {
+    url = this.baseUrl + pathMappings.trending;
 
     const u = new URL(url);
     u.searchParams.set('q', 'uhd');
