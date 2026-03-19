@@ -70,44 +70,65 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
   }
 
   handleGenre({ extra }) {
-    const { genre, quality } = extra;
+  const { genre } = extra;
 
-    const [keyword, order] = (genre || '').split('(');
+  if (!genre) return this.getInitialUrl();
 
-    let url;
+  const [rawKeyword, rawOrder] = genre.split('(');
+
+  const keyword = rawKeyword.trim();
+  const order = rawOrder?.replace(')', '').toLowerCase();
+
+  let url;
+
+  const isBaseCategory = pathMappings[keyword];
+  const is4k = keyword.toLowerCase().includes('4k');
+
+  // ✅ CASE 1: BASE CATEGORY (Trending/New/etc)
+  if (isBaseCategory) {
+    url = this.baseUrl + pathMappings[keyword];
 
     if (order) {
-      url = this.handleSearch({
-        extra: { search: keyword.trim() },
-      });
-
       const u = new URL(url);
-      u.searchParams.set('o', order.replace(')', '').toLowerCase());
+
+      if (order === 'new') u.searchParams.set('o', 'new');
+      if (order === 'popular') u.searchParams.set('o', 'popular');
+
       url = u.toString();
-    } else {
-      const path = pathMappings[keyword] || pathMappings.New;
-      url = `${this.baseUrl}${path}`;
     }
-
-    if (quality) {
-      const qualityMap = {
-        '4k': 'uhd',
-        '1080p': 'fhd',
-        '720p': 'hd',
-      };
-
-      const q = qualityMap[quality];
-
-      if (q) {
-        const u = new URL(url);
-        u.searchParams.set('q', q);
-        url = u.toString();
-      }
-    }
-
-    logger.info({ finalUrl: url }, 'catalog URL');
-    return url;
   }
+
+  // ✅ CASE 2: 4K ONLY (no keyword search)
+  else if (is4k && !order) {
+    url = this.baseUrl + pathMappings.Trending;
+
+    const u = new URL(url);
+    u.searchParams.set('q', 'uhd');
+
+    url = u.toString();
+  }
+
+  // ✅ CASE 3: KEYWORD SEARCH (milf, teens, etc)
+  else {
+    url = `${this.baseUrl}/s/${encodeURIComponent(keyword.toLowerCase())}/`;
+
+    const u = new URL(url);
+
+    if (order) {
+      u.searchParams.set('o', order);
+    }
+
+    // 4K filter inside keyword
+    if (genre.toLowerCase().includes('4k')) {
+      u.searchParams.set('q', 'uhd');
+    }
+
+    url = u.toString();
+  }
+
+  logger.info({ finalUrl: url }, 'catalog URL');
+  return url;
+}
 
   handlePagination(url, { extra: { skip } }) {
     const page = this.page(skip);
