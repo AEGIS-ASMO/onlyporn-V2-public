@@ -8,10 +8,10 @@ const hlsCache = new Map();
 const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
 
 const pathMappings = {
-  'Trending': '/trending_videos/',
-  'New': '/new_videos/',
-  'Popular': '/most_popular/',
-  'Upcoming': '/upcoming/',
+  'trending': '/trending_videos/',
+  'new': '/new_videos/',
+  'popular': '/most_popular/',
+  'upcoming': '/upcoming/',
 };
 
 class SpankbangProvider extends Provider {
@@ -81,7 +81,7 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
   // ✅ Extract parts safely
   if (genre.includes('(')) {
     const [base, inside] = genre.split('(');
-    keyword = base.trim();
+    keyword = base.trim().toLowerCase();
 
     const parts = inside.replace(')', '').split(' ');
 
@@ -95,6 +95,7 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
   } else {
     keyword = genre.trim();
   }
+keyword = keyword.toLowerCase();
 
   let url;
 
@@ -108,9 +109,11 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
 
     const u = new URL(url);
 
-    if (order && order !== 'trending') {
-      u.searchParams.set('o', order);
-    }
+    if (keyword !== 'upcoming') {
+  if (order && order !== 'trending' && order !== 'featured') {
+    u.searchParams.set('o', order);
+  }
+}
 
     if (is4k) {
       u.searchParams.set('q', 'uhd');
@@ -122,7 +125,7 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
   // =========================
   // ✅ CASE 2: PURE 4K (no keyword)
   // =========================
-  else if (keyword.toLowerCase() === '4k') {
+  else if (keyword === '4k' || keyword.includes('4k')) {
     url = this.baseUrl + pathMappings.Trending;
 
     const u = new URL(url);
@@ -139,7 +142,7 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
   // ✅ CASE 3: SEARCH KEYWORD
   // =========================
   else {
-    url = `${this.baseUrl}/s/${encodeURIComponent(keyword.toLowerCase())}/`;
+    url = `${this.baseUrl}/s/${encodeURIComponent(keyword)}/`;
 
     const u = new URL(url);
 
