@@ -200,7 +200,9 @@ class SpankbangProvider extends Provider {
         console.log('⚡ Using stream_data');
 
         let jsonString = match[1];
-        jsonString = jsonString.replace(/(\w+):/g, '"$1":');
+        jsonString = jsonString
+  .replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":') // quote keys
+  .replace(/'/g, '"'); // single → double quotes
 
         const streamsData = JSON.parse(jsonString);
 
