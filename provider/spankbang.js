@@ -54,9 +54,10 @@ class SpankbangProvider extends Provider {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
 }
       });
-console.log(html.slice(0, 500));
+
 
       const html = await response.text();
+console.log(html.slice(0, 500));
 if (html.includes('cf-chl') || html.includes('Just a moment')) {
   console.log('🚫 CLOUDFLARE BLOCK');
 }
