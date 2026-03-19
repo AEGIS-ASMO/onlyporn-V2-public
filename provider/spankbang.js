@@ -227,49 +227,49 @@ if (!streams.length) {
 
   if (m3u8Match) {
     const masterUrl = m3u8Match[0];
+const has4k = masterUrl.includes(',4k,');
+
+if (has4k) {
+  console.log('🔥 MASTER HAS 4K');
+}
 
 let forced4kStream = null;
 
-    try {
-// 🔥 FORCE 4K DISCOVERY (AFTER masterUrl is found)
-
-const idMatch = masterUrl.match(/\/(\d+)-/);
-
-if (idMatch) {
-  const videoId = idMatch[1];
-
-  const base = masterUrl.split('/hls/')[0] + '/hls/';
-  const pathParts = masterUrl.split('/hls/')[1].split('/');
-
-  const folderPath = pathParts.slice(0, 2).join('/');
-
-  const forced4kUrl = `${base}${folderPath}/${videoId}-4k.mp4/index-v1-a1.m3u8`;
-
+// 🚀 Only force 4K if NOT already in master
+if (!has4k) {
   try {
-    const res = await fetch(forced4kUrl, {
-      method: 'HEAD',
-      headers: {
-        'referer': 'https://spankbang.com/',
-        'origin': 'https://spankbang.com',
-        'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
-      },
-    });
+    const idMatch = masterUrl.match(/\/(\d+)-/);
 
+    if (idMatch) {
+      const videoId = idMatch[1];
 
+      const base = masterUrl.split('/hls/')[0] + '/hls/';
+      const pathParts = masterUrl.split('/hls/')[1].split('/');
+      const folderPath = pathParts.slice(0, 2).join('/');
 
-    if (res.ok) {
-      console.log('🔥 4K FOUND:', forced4kUrl);
+      const forced4kUrl = `${base}${folderPath}/${videoId}-4k.mp4/index-v1-a1.m3u8`;
 
-      forced4kStream = {
-        name: '2160p 4K',
-        url: forced4kUrl,
-        type: Provider.TYPE,
+      const res = await fetch(forced4kUrl, {
+        method: 'HEAD',
         headers: {
           referer: 'https://spankbang.com/',
           origin: 'https://spankbang.com',
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
         },
-      };
+      });
+
+      if (res.ok) {
+        forced4kStream = {
+          name: '2160p 4K',
+          url: forced4kUrl,
+          type: Provider.TYPE,
+          headers: {
+            referer: 'https://spankbang.com/',
+            origin: 'https://spankbang.com',
+          },
+        };
+      }
     }
   } catch (err) {
     console.log('❌ No 4K stream');
@@ -309,7 +309,14 @@ if (idMatch) {
 
         console.log('🌐 FETCHING PLAYLIST:', masterUrl);
 
-        const res = await fetch(masterUrl);
+        const res = await fetch(masterUrl, {
+  headers: {
+    referer: 'https://spankbang.com/',
+    origin: 'https://spankbang.com',
+    'user-agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+  },
+});
         const text = await res.text();
 
         const lines = text.split('\n');
@@ -346,12 +353,10 @@ if (idMatch) {
               let realHeight = height;
 
 // 🔥 Detect hidden 4K via bitrate
-if (bitrate > 12000000 && height === 1080) {
-  realHeight = 2160;
-}
-
-// 🔥 Detect via URL
-if (/2160|4k/i.test(streamUrl)) {
+if (
+  (bitrate > 12000000 && height === 1080) ||
+  /4k|2160/i.test(streamUrl)
+) {
   realHeight = 2160;
 }
               
