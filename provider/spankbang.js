@@ -3,11 +3,6 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
-const { load } = require('cheerio');
-const logger = require('../logger');
-const { meta } = require('../model');
-const Provider = require('./provider');
-
 // 🚀 SIMPLE MEMORY CACHE (PUT HERE)
 const hlsCache = new Map();
 const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
