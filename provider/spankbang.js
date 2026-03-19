@@ -133,11 +133,12 @@ class SpankbangProvider extends Provider {
   poster = poster
     .replace('/small/', '/large/')
     .replace('/medium/', '/large/')
-    .replace('/thumbs/', '/thumbs/large/')
-    .replace('/thumbs/large/', '/thumbs/large_hd/')
-    .replace('/thumbs/large_hd/', '/thumbs/full/');
-}
-      }
+    .replace('/thumbs/', '/thumbs/large/');
+
+  // try HD upgrade only if supported
+  if (poster.includes('/large/')) {
+    poster = poster.replace('/large/', '/large_hd/');
+  }
 
       const title =
         img.attr('alt') ||
@@ -277,6 +278,16 @@ if (!streams.length) {
 
               // 🚨 FAKE 4K DETECTION
               let realHeight = height;
+
+// 🔥 Detect hidden 4K via bitrate
+if (bitrate > 12000000 && height === 1080) {
+  realHeight = 2160;
+}
+
+// 🔥 Detect via URL
+if (/2160|4k/i.test(streamUrl)) {
+  realHeight = 2160;
+}
               
 
               let name = realHeight ? `${realHeight}p` : 'Auto';
