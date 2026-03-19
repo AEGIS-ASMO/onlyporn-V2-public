@@ -135,10 +135,11 @@ class SpankbangProvider extends Provider {
     .replace('/medium/', '/large/')
     .replace('/thumbs/', '/thumbs/large/');
 
-  // try HD upgrade only if supported
-  if (poster.includes('/large/')) {
+  // try HD only if known pattern
+  if (/\/large\//.test(poster)) {
     poster = poster.replace('/large/', '/large_hd/');
   }
+}
 
       const title =
         img.attr('alt') ||
