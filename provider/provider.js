@@ -190,7 +190,9 @@ class Provider {
       }
 
       const html = await this.fetchHtml(url).catch(() => '');
-      const metas = this.getCatalogMetas(html, url);
+      const metas = this.getCatalogMetas.length >= 2
+  ? this.getCatalogMetas(html, url)   // only Spankbang uses this
+  : this.getCatalogMetas(html);       // all others unchanged
 
       logger.debug({ metasSize: metas.length }, 'catalog');
 
