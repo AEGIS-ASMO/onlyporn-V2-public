@@ -59,7 +59,6 @@ class SpankbangProvider extends Provider {
 
 
       const html = await response.text();
-console.log(html.slice(0, 500));
 if (html.includes('cf-chl') || html.includes('Just a moment')) {
   console.log('🚫 CLOUDFLARE BLOCK');
 }
@@ -192,66 +191,97 @@ items.each((index, element) => {
   const $e = $(element);
 
   const link = $e.attr('href');
-
   if (!link) return;
 
-  // 🔥 1. Skip pinned/top repeated videos
-  if (index < 8 && currentUrl.includes('trending')) return;
+  // =========================
+  // 🔥 SMART PINNED DETECTION
+  // =========================
+  const classes = ($e.attr('class') || '').toLowerCase();
+console.log(classes);
 
-  // 🔥 2. Local dedupe (same page)
+  const isPinned =
+    classes.includes('pinned') ||
+    classes.includes('feature') ||
+    classes.includes('sponsor') ||
+    classes.includes('top');
+
+  const badgeText = $e.find('.badge, .label').text().toLowerCase();
+
+  const isPromoted =
+    badgeText.includes('featured') ||
+    badgeText.includes('sponsored') ||
+    badgeText.includes('top');
+
+  // ✅ Hybrid safety (DOM + index fallback)
+  if (
+    isPinned ||
+    isPromoted ||
+    (index < 5 && currentUrl.includes('trending'))
+  ) return;
+
+  // =========================
+  // ✅ LOCAL DEDUPE
+  // =========================
   if (seen.has(link)) return;
   seen.add(link);
- 
-  // ✅ Prevent memory leak
+
+  // =========================
+  // ✅ GLOBAL CACHE RESET
+  // =========================
   if (globalSeen.size > 5000) {
     globalSeen.clear();
   }
 
-  // 🔥 3. Global dedupe (across categories)
+  // =========================
+  // ✅ GLOBAL DEDUPE
+  // =========================
   if (globalSeen.has(link)) return;
   globalSeen.add(link);
-      const img = $e.find('img');
 
-      let poster =
-  img.attr('data-src') ||
-  img.attr('data-original') ||
-  img.attr('src') ||
-  img.attr('data-preview');
+  // =========================
+  // 🎬 NORMAL PARSING
+  // =========================
+  const img = $e.find('img');
 
-      if (poster) {
-        poster = poster
-          .replace('/small/', '/large/')
-          .replace('/medium/', '/large/')
-          .replace('/thumbs/', '/thumbs/large/');
+  let poster =
+    img.attr('data-src') ||
+    img.attr('data-original') ||
+    img.attr('src') ||
+    img.attr('data-preview');
 
-        if (/\/large\//.test(poster)) {
-          poster = poster.replace('/large/', '/large_hd/');
-        }
-      }
+  if (poster) {
+    poster = poster
+      .replace('/small/', '/large/')
+      .replace('/medium/', '/large/')
+      .replace('/thumbs/', '/thumbs/large/');
 
-      const title =
-  img.attr('alt') ||
-  $e.attr('title') ||
-  $e.find('.n').text() ||
-  $e.text().trim();
+    if (/\/large\//.test(poster)) {
+      poster = poster.replace('/large/', '/large_hd/');
+    }
+  }
 
-      if (!link || !title) return;
+  const title =
+    img.attr('alt') ||
+    $e.attr('title') ||
+    $e.find('.n').text() ||
+    $e.text().trim();
 
-      const videoPageUrl = this.baseUrl + link;
+  if (!title) return;
 
-// 🔥 ADD THIS
-const uniqueId = videoPageUrl + '|' + currentUrl + '|' + index;
+  const videoPageUrl = this.baseUrl + link;
 
-      metadataList.push(
-  new meta.MetaPreview(
-    uniqueId, // ✅ USE UNIQUE ID
-    'movie',
-    title,
-    poster,
-    { videoPageUrl }, // keep original URL for playback
-  ),
-);
-    });
+  const uniqueId = videoPageUrl + '|' + currentUrl + '|' + index;
+
+  metadataList.push(
+    new meta.MetaPreview(
+      uniqueId,
+      'movie',
+      title,
+      poster,
+      { videoPageUrl },
+    ),
+  );
+});
 
     logger.debug({ count: metadataList.length }, 'catalog items parsed');
     return metadataList;
