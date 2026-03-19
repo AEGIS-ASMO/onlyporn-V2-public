@@ -229,6 +229,36 @@ if (!streams.length) {
     const masterUrl = m3u8Match[0];
 
     try {
+// 🔥 FORCE 4K DISCOVERY
+const idMatch = masterUrl.match(/\/(\d+)-/);
+
+if (idMatch) {
+  const videoId = idMatch[1];
+
+  const base = masterUrl.split('/hls/')[0] + '/hls/';
+  const pathParts = masterUrl.split('/hls/')[1].split('/');
+
+  // rebuild path like: 1/6/
+  const folderPath = pathParts.slice(0, 2).join('/');
+
+  const forced4kUrl = `${base}${folderPath}/${videoId}-4k.mp4/index-v1-a1.m3u8`;
+
+  try {
+    const res = await fetch(forced4kUrl, { method: 'HEAD' });
+
+    if (res.ok) {
+      console.log('🔥 4K FOUND:', forced4kUrl);
+
+      streams.unshift({
+        name: '2160p 4K',
+        url: forced4kUrl,
+        type: Provider.TYPE,
+      });
+    }
+  } catch (err) {
+    console.log('❌ No 4K stream');
+  }
+}
 
       // ⚡ CACHE HIT
       if (hlsCache.has(masterUrl)) {
