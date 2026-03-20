@@ -59,7 +59,6 @@ class SpankbangProvider extends Provider {
 
 
       const html = await response.text();
-console.log(html.slice(0, 500));
 if (html.includes('cf-chl') || html.includes('Just a moment')) {
   console.log('🚫 CLOUDFLARE BLOCK');
 }
@@ -159,7 +158,7 @@ keyword = keyword.toLowerCase();
     url = u.toString();
   }
 
-  logger.info({ finalUrl: url }, 'catalog URL');
+  console.log({ finalUrl: url }, 'catalog URL');
   return url;
 }
 
@@ -184,7 +183,10 @@ keyword = keyword.toLowerCase();
     const metadataList = [];
     const $ = load(html);
 
-    const items = $('a.thumb, a.video-item, .video-item a, a[href*="/video"]');
+    const items = $('a:has(img)').filter((_, el) => {
+  const href = $(el).attr('href') || '';
+  return href.includes('/video');
+});
 
     const seen = new Set();
 
