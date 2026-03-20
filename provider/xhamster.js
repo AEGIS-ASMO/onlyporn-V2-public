@@ -334,7 +334,6 @@ if (streamUrl && !streamUrl.startsWith('http')) {
     return {
       ...stream,
       url:stream.url,
-      type:'hls',
 headers: {
       'referer': this.baseUrl + '/',
       'origin': this.baseUrl,
