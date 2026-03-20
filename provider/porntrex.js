@@ -118,9 +118,52 @@ async resolveStream(url) {
   }
 }
 
+async extractHlsStreams(masterUrl) {
+  try {
+    const res = await fetch(masterUrl);
+    const text = await res.text();
+
+    const lines = text.split('\n');
+
+    const streams = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (line.startsWith('#EXT-X-STREAM-INF')) {
+        const resolutionMatch = line.match(/RESOLUTION=\d+x(\d+)/);
+        const height = resolutionMatch ? resolutionMatch[1] : 'auto';
+
+        const nextLine = lines[i + 1];
+
+        if (nextLine && !nextLine.startsWith('#')) {
+          let streamUrl = nextLine.trim();
+
+          // handle relative URLs
+          if (!streamUrl.startsWith('http')) {
+            const base = masterUrl.substring(0, masterUrl.lastIndexOf('/') + 1);
+            streamUrl = base + streamUrl;
+          }
+
+          streams.push({
+            url: streamUrl,
+            name: `${height}p`,
+            type: Provider.TYPE,
+          });
+        }
+      }
+    }
+
+    return streams;
+
+  } catch (err) {
+    logger.error("HLS parse failed:", err);
+    return [];
+  }
+}
+
   async parseVideoPage({ id, html }) {
 
-// Prevent re-parsing direct stream URLs
   if (id.includes("get_file")) {
     return { videoPageUrl: id };
   }
@@ -133,57 +176,116 @@ async resolveStream(url) {
   const embedUrl = `${this.baseUrl}embed/${videoId}`;
   const embedHtml = await this.fetchHtml(embedUrl);
 
-const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
-const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
-
-  const urls = [];
-
-const main = embedHtml.match(/video_url:\s*'([^']+)'/);
-if (main) urls.push(main[1]);
-
-const alt1 = embedHtml.match(/video_alt_url:\s*'([^']+)'/);
-if (alt1) urls.push(alt1[1]);
-
-const alt2 = embedHtml.match(/video_alt_url2:\s*'([^']+)'/);
-if (alt2) urls.push(alt2[1]);
-
-  if (!match) {
-    logger.error("Porntrex: video_url not found");
-    return null;
-  }
-
-  let videoUrl = match[1];
-
-  if (videoUrl.startsWith("//")) {
-    videoUrl = "https:" + videoUrl;
-  }
-
-  const $ = load(html);
+  const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
+  const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
 
   const title = titleMatch ? titleMatch[1] : "Porntrex Video";
 
-let poster = previewMatch ? previewMatch[1] : null;
+  let poster = previewMatch ? previewMatch[1] : null;
+  if (poster && poster.startsWith("//")) {
+    poster = "https:" + poster;
+  }
 
-if (poster && poster.startsWith("//")) {
-  poster = "https:" + poster;
+  /* =========================
+     🔥 COLLECT ALL STREAM URLS
+  ========================= */
+  const urls = [];
+
+  const patterns = [
+    /video_url:\s*'([^']+)'/,
+    /video_alt_url:\s*'([^']+)'/,
+    /video_alt_url2:\s*'([^']+)'/,
+    /video_alt_url3:\s*'([^']+)'/,
+    /video_alt_url4:\s*'([^']+)'/,
+    /video_alt_url5:\s*'([^']+)'/,
+  ];
+
+  for (const regex of patterns) {
+    const match = embedHtml.match(regex);
+    if (match && match[1]) {
+      let url = match[1];
+
+      if (url.startsWith("//")) {
+        url = "https:" + url;
+      }
+
+      urls.push(url);
+    }
+  }
+
+  if (!urls.length) {
+    logger.error("Porntrex: no video URLs found");
+    return null;
+  }
+
+  /* =========================
+   ⚡ RESOLVE IN PARALLEL
+========================= */
+const resolvedUrls = await Promise.all(
+  urls.map(url => this.resolveStream(url))
+);
+
+/* =========================
+   ⚡ BUILD STREAMS
+========================= */
+let streams = [];
+
+for (const resolved of resolvedUrls) {
+
+  if (!resolved) continue;
+
+  if (resolved.includes('.m3u8')) {
+    const hlsStreams = await this.extractHlsStreams(resolved);
+    streams.push(...hlsStreams);
+  } else {
+    streams.push({
+      url: resolved,
+      name: 'mp4',
+      type: Provider.TYPE,
+    });
+  }
 }
 
-  const finalStream = await this.resolveStream(videoUrl);
+/* =========================
+   🧹 REMOVE DUPLICATES
+========================= */
+const seen = new Set();
 
-return {
-  metaResponse: new meta.MetaResponse(
-    id,
-    "movie",
-    title,
-    {
-      description: title,
-      background: poster
-    }
-  ),
-  streams: urls.map(u => ({
-    url: u.startsWith('//') ? 'https:' + u : u
-  }))
-};
+streams = streams.filter(s => {
+  if (seen.has(s.url)) return false;
+  seen.add(s.url);
+  return true;
+});
+
+/* =========================
+   🎯 SORT BY QUALITY
+========================= */
+streams.sort((a, b) => {
+  const getQ = s => parseInt(s.name) || 0;
+  return getQ(b) - getQ(a);
+});
+
+  /* fallback */
+  if (!streams.length) {
+    streams = urls.map(url => ({
+      url,
+      name: 'auto',
+      type: Provider.TYPE,
+    }));
+  }
+
+  return {
+    metaResponse: new meta.MetaResponse(
+      id,
+      "movie",
+      title,
+      {
+        description: title,
+        background: poster
+      }
+    ),
+    streams
+  };
 }
 
 }
