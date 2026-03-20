@@ -229,7 +229,7 @@ items.each((index, element) => {
       const videoPageUrl = this.baseUrl + link;
 
 // 🔥 ADD THIS
-const uniqueId = videoPageUrl + '|' + currentUrl + '|' + index;
+const uniqueId = `${currentUrl}::${link}::${index}`;
 
       metadataList.push(
   new meta.MetaPreview(
