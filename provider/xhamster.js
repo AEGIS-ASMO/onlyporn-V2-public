@@ -3,9 +3,6 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
-const cache = new Map();
-const CACHE_TTL = 1000 * 60 * 5; // 5 min
-
 /* =========================
    ✅ ADDED: delay + retry
 ========================= */
@@ -53,29 +50,11 @@ class XhamsterProvider extends Provider {
      ✅ OVERRIDE fetchHtml ONLY
   ========================= */
   async fetchHtml(url) {
-  const cached = cache.get(url);
-
-  if (cached && Date.now() - cached.time < CACHE_TTL) {
-    return cached.data;
+    return fetchWithRetry(
+      (u) => super.fetchHtml(u),
+      url
+    );
   }
-
-  const data = await fetchWithRetry(
-    (u) => super.fetchHtml(u, {
-  headers: {
-    'user-agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
-    'accept': 'text/html,application/xhtml+xml',
-    'accept-language': 'en-US,en;q=0.9',
-    'referer': this.baseUrl + '/',
-  }
-}),
-    url
-  );
-
-  cache.set(url, { data, time: Date.now() });
-
-  return data;
-}
 
   getInitialUrl(catalogId) {
 
@@ -224,8 +203,8 @@ class XhamsterProvider extends Provider {
         'movie',
         title,
         poster,
-        { videoPageUrl }
-      )
+        { videoPageUrl },
+      ),
     );
 
     count++;
@@ -249,10 +228,6 @@ class XhamsterProvider extends Provider {
 }
 
   parseVideoPage({ id, html }) {
-if (id.includes('/moments/')) {
-  logger.warn("Skipping moments content");
-  return {};
-}
 
     let match =
       html.match(/window\.initials\s*=\s*(\{.*?\});/) ||
@@ -319,9 +294,8 @@ if (streamUrl && !streamUrl.startsWith('http')) {
       json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
 
     if (!streamUrl) {
-  logger.warn("xHamster: no stream URL found");
-  return {};
-}
+      logger.warn("xHamster: no stream URL found");
+    }
 
     return new meta.MetaResponse(
       id,
@@ -341,17 +315,13 @@ if (streamUrl && !streamUrl.startsWith('http')) {
 
     return {
       ...stream,
-      url: stream.url || url,
-      type: 'hls',
-headers: {
-      'referer': this.baseUrl + '/',
-      'origin': this.baseUrl,
-      'user-agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
-}
-    
-};
-  
+      url:
+        url
+          .replace('_TPL_.av1.mp4.m3u8', '')
+          .replace('_TPL_.h264.mp4.m3u8', '') +
+        stream.url,
+    };
+  }
 }
 
 module.exports = XhamsterProvider.create;
