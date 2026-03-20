@@ -59,6 +59,7 @@ class SpankbangProvider extends Provider {
 
 
       const html = await response.text();
+console.log(html.slice(0, 500));
 if (html.includes('cf-chl') || html.includes('Just a moment')) {
   console.log('🚫 CLOUDFLARE BLOCK');
 }
@@ -191,74 +192,66 @@ items.each((index, element) => {
   const $e = $(element);
 
   const link = $e.attr('href');
+
   if (!link) return;
 
-  // 🔥 Skip pinned ONLY on trending
+  // 🔥 1. Skip pinned/top repeated videos
   if (index < 8 && currentUrl.includes('trending')) return;
 
-  // =========================
-  // ✅ LOCAL DEDUPE
-  // =========================
+  // 🔥 2. Local dedupe (same page)
   if (seen.has(link)) return;
   seen.add(link);
-
-  // =========================
-  // ✅ GLOBAL CACHE RESET
-  // =========================
+ 
+  // ✅ Prevent memory leak
   if (globalSeen.size > 5000) {
     globalSeen.clear();
   }
 
-  // =========================
-  // ✅ GLOBAL DEDUPE
-  // =========================
+  // 🔥 3. Global dedupe (across categories)
   if (globalSeen.has(link)) return;
   globalSeen.add(link);
+      const img = $e.find('img');
 
-  // =========================
-  // 🎬 NORMAL PARSING
-  // =========================
-  const img = $e.find('img');
+      let poster =
+  img.attr('data-src') ||
+  img.attr('data-original') ||
+  img.attr('src') ||
+  img.attr('data-preview');
 
-  let poster =
-    img.attr('data-src') ||
-    img.attr('data-original') ||
-    img.attr('src') ||
-    img.attr('data-preview');
+      if (poster) {
+        poster = poster
+          .replace('/small/', '/large/')
+          .replace('/medium/', '/large/')
+          .replace('/thumbs/', '/thumbs/large/');
 
-  if (poster) {
-    poster = poster
-      .replace('/small/', '/large/')
-      .replace('/medium/', '/large/')
-      .replace('/thumbs/', '/thumbs/large/');
+        if (/\/large\//.test(poster)) {
+          poster = poster.replace('/large/', '/large_hd/');
+        }
+      }
 
-    if (/\/large\//.test(poster)) {
-      poster = poster.replace('/large/', '/large_hd/');
-    }
-  }
+      const title =
+  img.attr('alt') ||
+  $e.attr('title') ||
+  $e.find('.n').text() ||
+  $e.text().trim();
 
-  const title =
-    img.attr('alt') ||
-    $e.attr('title') ||
-    $e.find('.n').text() ||
-    $e.text().trim();
+      if (!link || !title) return;
 
-  if (!title) return;
+      const videoPageUrl = this.baseUrl + link;
 
-  const videoPageUrl = this.baseUrl + link;
+// 🔥 ADD THIS
+const uniqueId = videoPageUrl + '|' + currentUrl + '|' + index;
 
-  const uniqueId = videoPageUrl + '|' + currentUrl + '|' + index;
-
-  metadataList.push(
-    new meta.MetaPreview(
-      uniqueId,
-      'movie',
-      title,
-      poster,
-      { videoPageUrl },
-    ),
-  );
-});
+      metadataList.push(
+  new meta.MetaPreview(
+    uniqueId, // ✅ USE UNIQUE ID
+    'movie',
+    title,
+    poster,
+    { videoPageUrl }, // keep original URL for playback
+  ),
+);
+    });
 
     logger.debug({ count: metadataList.length }, 'catalog items parsed');
     return metadataList;
