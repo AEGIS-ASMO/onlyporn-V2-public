@@ -173,6 +173,8 @@ class XhamsterProvider extends Provider {
 
     if (videoPageUrl && videoPageUrl.includes('/ff/out')) return;
 
+if (videoPageUrl && videoPageUrl.includes('/moments/')) return;
+
     const $img = $a.find('img').first();
 
     let poster =
@@ -320,6 +322,11 @@ if (streamUrl && !streamUrl.startsWith('http')) {
           .replace('_TPL_.av1.mp4.m3u8', '')
           .replace('_TPL_.h264.mp4.m3u8', '') +
         stream.url,
+headers: {
+      Referer: 'https://xhamster.com/',
+      Origin: 'https://xhamster.com',
+      'User-Agent': 'Mozilla/5.0',
+    },
     };
   }
 }
