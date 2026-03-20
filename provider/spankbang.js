@@ -198,11 +198,6 @@ items.each((index, element) => {
   // 🔥 2. Local dedupe (same page)
   if (seen.has(link)) return;
   seen.add(link);
- 
-  // ✅ Prevent memory leak
-  if (globalSeen.size > 5000) {
-    globalSeen.clear();
-  }
 
       const img = $e.find('img');
 
