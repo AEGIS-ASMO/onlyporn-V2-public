@@ -228,10 +228,25 @@ items.each((index, element) => {
 
       const videoPageUrl = this.baseUrl + link;
 
+const is4kCategory = currentUrl.includes('q=uhd');
+
+// 🚫 Skip pinned fake entries EARLY for 4K pages
+if (is4kCategory) {
+  const text = $e.text().toLowerCase();
+  const titleCheck = (title || '').toLowerCase();
+
+  const looks4k =
+    /4k|2160/.test(text) ||
+    /4k|2160/.test(titleCheck) ||
+    /uhd/.test(text);
+
+  if (!looks4k) {
+    return; // ❌ skip immediately
+  }
+}
+
 // 🔥 ADD THIS
 const uniqueId = `${currentUrl}::${link}::${index}`;
-
-      const is4kCategory = currentUrl.includes('q=uhd');
 
 metadataList.push(
   new meta.MetaPreview(
