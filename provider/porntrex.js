@@ -229,6 +229,43 @@ logger.debug(`CHECK alt_url: ${embedHtml.includes('video_alt_url')}`);
     }
 
 /* =========================
+   🎯 PRIMARY: DIRECT MP4
+========================= */
+const videoUrlMatch = embedHtml.match(/video_url:\s*'([^']+)'/);
+
+if (videoUrlMatch && videoUrlMatch[1]) {
+  let videoUrl = videoUrlMatch[1];
+
+  if (videoUrl.startsWith("//")) {
+    videoUrl = "https:" + videoUrl;
+  }
+
+  logger.debug(`DIRECT VIDEO FOUND: ${videoUrl}`);
+
+  return {
+    metaResponse: new meta.MetaResponse(
+      id,
+      "movie",
+      title,
+      {
+        description: title,
+        background: poster
+      }
+    ),
+    streams: [{
+      url: videoUrl,
+      name: '480p',
+      type: Provider.TYPE,
+      headers: {
+        Referer: this.baseUrl,
+        Origin: this.baseUrl,
+        'User-Agent': 'Mozilla/5.0',
+      }
+    }]
+  };
+}
+
+/* =========================
    🔥 PRIORITY: HLS STREAM
 ========================= */
 const hlsMatch = embedHtml.match(/hls_url:\s*'([^']+)'/);
@@ -311,11 +348,6 @@ for (const resolved of resolvedUrls) {
   logger.debug(`RESOLVED STREAM: ${resolved}`);
 
   if (!resolved) continue;
-
-if (resolved.includes('get_file')) {
-  logger.debug(`SKIPPING PROTECTED URL: ${resolved}`);
-  continue;
-}
 
   // 🔥 HLS SUPPORT
   if (resolved.includes('.m3u8')) {
