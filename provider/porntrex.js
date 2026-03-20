@@ -130,8 +130,8 @@ if (url.includes('/categories/')) {
   async resolveStream(url) {
   try {
     const res = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
+      method: "HEAD",
+      redirect: "manual",
       headers: {
         'User-Agent': 'Mozilla/5.0',
         'Referer': this.baseUrl,
@@ -139,8 +139,14 @@ if (url.includes('/categories/')) {
       }
     });
 
-    logger.debug(`FINAL RESOLVED URL: ${res.url}`);
-    return res.url;
+    const location = res.headers.get("location");
+
+    if (location) {
+      logger.debug(`REDIRECT RESOLVED: ${location}`);
+      return location;
+    }
+
+    return url;
 
   } catch (err) {
     logger.error("Resolve failed:", err);
@@ -198,10 +204,6 @@ if (url.includes('/categories/')) {
 
   async parseVideoPage({ id, html }) {
 
-    if (id.includes("get_file")) {
-      return { videoPageUrl: id };
-    }
-
     const videoIdMatch = id.match(/\d+/);
     if (!videoIdMatch) return null;
 
@@ -242,28 +244,29 @@ if (videoUrlMatch && videoUrlMatch[1]) {
 
   logger.debug(`DIRECT VIDEO FOUND: ${videoUrl}`);
 
-  return {
-    metaResponse: new meta.MetaResponse(
-      id,
-      "movie",
-      title,
-      {
-        description: title,
-        background: poster
-      }
-    ),
-    streams: [{
-      url: videoUrl,
-      name: '480p',
-      type: Provider.TYPE,
-      headers: {
-        Referer: this.baseUrl,
-        Origin: this.baseUrl,
-        'User-Agent': 'Mozilla/5.0',
-      }
-    }]
-  };
-}
+  const finalStream = await this.resolveStream(videoUrl);
+
+return {
+  metaResponse: new meta.MetaResponse(
+    id,
+    "movie",
+    title,
+    {
+      description: title,
+      background: poster
+    }
+  ),
+  streams: [{
+    url: finalStream,
+    name: '480p',
+    type: Provider.TYPE,
+    headers: {
+      Referer: this.baseUrl,
+      Origin: this.baseUrl,
+      'User-Agent': 'Mozilla/5.0',
+    }
+  }]
+};
 
 /* =========================
    🔥 PRIORITY: HLS STREAM
