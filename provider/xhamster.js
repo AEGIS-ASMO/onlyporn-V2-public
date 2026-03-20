@@ -11,14 +11,16 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function fetchWithRetry(instance, url, retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
-      // random delay (2–4 sec)
-      await delay(2000 + Math.random() * 2000);
-
+      // 🚀 NO delay on first attempt
       return await instance(url);
+
     } catch (err) {
       if (err.response?.status === 429) {
         logger.warn(`429 hit, retrying (${i + 1})...`);
-        await delay(5000 * (i + 1)); // backoff
+
+        // ⏱️ delay ONLY after failure
+        await delay(2000 * (i + 1) + Math.random() * 1000);
+
       } else {
         throw err;
       }
