@@ -225,7 +225,7 @@ class XhamsterProvider extends Provider {
         title,
         poster,
         { videoPageUrl }
-      ),
+      )
     );
 
     count++;
@@ -348,8 +348,10 @@ headers: {
       'origin': this.baseUrl,
       'user-agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
-    };
-  }
+}
+    
+};
+  
 }
 
 module.exports = XhamsterProvider.create;
