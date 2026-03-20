@@ -193,31 +193,8 @@ items.each((index, element) => {
   const link = $e.attr('href');
   if (!link) return;
 
-  // =========================
-  // 🔥 SMART PINNED DETECTION
-  // =========================
-  const classes = ($e.attr('class') || '').toLowerCase();
-console.log(classes);
-
-  const isPinned =
-    classes.includes('pinned') ||
-    classes.includes('feature') ||
-    classes.includes('sponsor') ||
-    classes.includes('top');
-
-  const badgeText = $e.find('.badge, .label').text().toLowerCase();
-
-  const isPromoted =
-    badgeText.includes('featured') ||
-    badgeText.includes('sponsored') ||
-    badgeText.includes('top');
-
-  // ✅ Hybrid safety (DOM + index fallback)
-  if (
-    isPinned ||
-    isPromoted ||
-    (index < 5 && currentUrl.includes('trending'))
-  ) return;
+  // 🔥 Skip pinned ONLY on trending
+  if (index < 8 && currentUrl.includes('trending')) return;
 
   // =========================
   // ✅ LOCAL DEDUPE
