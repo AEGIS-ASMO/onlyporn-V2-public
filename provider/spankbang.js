@@ -231,13 +231,15 @@ items.each((index, element) => {
 // 🔥 ADD THIS
 const uniqueId = `${currentUrl}::${link}::${index}`;
 
-      metadataList.push(
+      const is4kCategory = currentUrl.includes('q=uhd');
+
+metadataList.push(
   new meta.MetaPreview(
-    uniqueId, // ✅ USE UNIQUE ID
+    uniqueId,
     'movie',
     title,
     poster,
-    { videoPageUrl }, // keep original URL for playback
+    { videoPageUrl, is4kCategory } // ✅ pass flag
   ),
 );
     });
@@ -249,21 +251,22 @@ const uniqueId = `${currentUrl}::${link}::${index}`;
   async getMetadata(args) {
   logger.debug({ args }, 'getMetadata');
 
-  const { id } = args;
+  const { id, extra } = args;
 
-  const [, link] = id.split('::');
+  const parts = id.split('::');
+  const link = parts[1];
 
-  const videoPageUrl = this.baseUrl + link; // ✅ FIX
+  const videoPageUrl = this.baseUrl + link;
 
   return this.fetchHtml(videoPageUrl)
-    .then(html => this.parseVideoPage({ id: videoPageUrl, html }))
+    .then(html => this.parseVideoPage({ id: videoPageUrl, html, is4kCategory: extra?.is4kCategory }))
     .catch((error) => {
       logger.error({ error, args }, 'getMetadata error');
       throw error;
     });
 }
 
-  async parseVideoPage({ html }) {
+  async parseVideoPage({ html, is4kCategory }) {
     const $ = load(html);
 
     const url = $('meta[property="og:url"]').attr('content');
@@ -306,14 +309,27 @@ const uniqueId = `${currentUrl}::${link}::${index}`;
     }
 
     if (streams.length) {
-      console.log('✅ stream_data success');
-      return new meta.MetaResponse(url, 'movie', title, {
-        streams,
-        poster,
-        background: poster,
-        description,
-      });
+  console.log('✅ stream_data success');
+
+  // ✅ STRICT 4K FILTER (ADD HERE ALSO)
+  if (is4kCategory) {
+    const has4k = streams.some(s =>
+      /2160|4k/i.test(s.name) || /2160|4k/i.test(s.url)
+    );
+
+    if (!has4k) {
+      console.log('🚫 Skipping non-4K video (stream_data)');
+      return {};
     }
+  }
+
+  return new meta.MetaResponse(url, 'movie', title, {
+    streams,
+    poster,
+    background: poster,
+    description,
+  });
+}
 
     const m3u8Match = scripts.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
 
@@ -440,6 +456,18 @@ const uniqueId = `${currentUrl}::${link}::${index}`;
       console.log('❌ No streams found after parsing');
       return {};
     }
+
+// ✅ STRICT 4K FILTER
+if (is4kCategory) {
+  const has4k = streams.some(s =>
+    /2160|4k/i.test(s.name) || /2160|4k/i.test(s.url)
+  );
+
+  if (!has4k) {
+    console.log('🚫 Skipping non-4K video');
+    return {}; // ❌ REMOVE from catalog
+  }
+}
 
     return new meta.MetaResponse(url, 'movie', title, {
       streams,
