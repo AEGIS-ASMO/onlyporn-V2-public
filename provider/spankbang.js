@@ -6,6 +6,8 @@ const Provider = require('./provider');
 // 🚀 SIMPLE MEMORY CACHE
 const hlsCache = new Map();
 const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
+// 🔥 GLOBAL DEDUPE
+const globalSeen = new Set();
 
 const pathMappings = {
   'trending': '/trending_videos/',
@@ -70,6 +72,9 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
 
   handleGenre({ extra }) {
   const { genre } = extra;
+
+// 🔥 RESET ONLY WHEN USER CHANGES CATEGORY
+  globalSeen.clear();
 
   if (!genre) return this.getInitialUrl();
 
@@ -198,6 +203,16 @@ items.each((index, element) => {
   // 🔥 2. Local dedupe (same page)
   if (seen.has(link)) return;
   seen.add(link);
+// ✅ Prevent memory leak
+  if (globalSeen.size > 2000) {
+  // remove oldest instead of clearing all
+  globalSeen.delete(globalSeen.values().next().value);
+}
+
+  // 🔥 3. Global dedupe (across categories)
+  if (globalSeen.has(link)) return;
+  globalSeen.add(link);
+      const img = $e.find('img');
  
   
       const img = $e.find('img');
