@@ -127,27 +127,33 @@ if (url.includes('/categories/')) {
     return jsonString;
   }
 
-  // kept (not used here anymore)
   async resolveStream(url) {
-    try {
-      const res = await fetch(url, {
-        method: "HEAD",
-        redirect: "manual"
-      });
-
-      const location = res.headers.get("location");
-
-      if (location) {
-        logger.debug("Resolved stream redirect:", location);
-        return location;
+  try {
+    const res = await fetch(url, {
+      method: "GET", // 🔥 HEAD sometimes fails
+      redirect: "manual",
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': this.baseUrl,
+        'Origin': this.baseUrl
       }
+    });
 
-      return url;
-    } catch (err) {
-      logger.error("Porntrex redirect resolve failed:", err);
-      return url;
+    const location = res.headers.get("location");
+
+    if (location) {
+      logger.debug(`REDIRECT FOUND → ${location}`);
+      return location.startsWith('//') ? 'https:' + location : location;
     }
+
+    logger.debug(`NO REDIRECT → using original`);
+    return url;
+
+  } catch (err) {
+    logger.error("Resolve failed:", err);
+    return url;
   }
+}
 
   // kept (not used here anymore)
   async extractHlsStreams(masterUrl) {
@@ -232,24 +238,59 @@ if (url.includes('/categories/')) {
   'video_alt_url5',
 ];
 
-let streams = [];
+let rawUrls = [];
 
 streamKeys.forEach(key => {
-  const urlMatch = embedHtml.match(new RegExp(`${key}:\\s*'([^']+)'`));
-  const labelMatch = embedHtml.match(new RegExp(`${key}_text:\\s*'([^']+)'`));
+  const match = embedHtml.match(new RegExp(`${key}:\\s*'([^']+)'`));
 
-  if (urlMatch && urlMatch[1]) {
-    let url = urlMatch[1];
+  if (match && match[1]) {
+    let url = match[1];
 
     if (url.startsWith("//")) {
-  url = "https:" + url;
-} else if (!url.startsWith("http")) {
-  url = this.baseUrl.replace(/\/$/, '') + url;
+      url = "https:" + url;
+    } else if (!url.startsWith("http")) {
+      url = this.baseUrl.replace(/\/$/, '') + url;
+    }
+
+    logger.debug(`RAW STREAM [${key}]: ${url}`);
+    rawUrls.push(url);
+  }
+});
+
+if (!rawUrls.length) {
+  logger.error("Porntrex: no raw URLs found");
+  return null;
 }
 
+/* =========================
+   ⚡ RESOLVE STREAMS
+========================= */
+const resolvedUrls = await Promise.all(
+  rawUrls.map(url => this.resolveStream(url))
+);
+
+let streams = [];
+
+for (const resolved of resolvedUrls) {
+
+  logger.debug(`RESOLVED STREAM: ${resolved}`);
+
+  if (!resolved) continue;
+
+  // 🔥 HLS SUPPORT
+  if (resolved.includes('.m3u8')) {
+    logger.debug(`HLS DETECTED: ${resolved}`);
+
+    const hlsStreams = await this.extractHlsStreams(resolved);
+
+    logger.debug(`HLS STREAM COUNT: ${hlsStreams.length}`);
+
+    streams.push(...hlsStreams);
+
+  } else {
     streams.push({
-      url,
-      name: labelMatch ? labelMatch[1] : key,
+      url: resolved,
+      name: 'mp4',
       type: Provider.TYPE,
       headers: {
         Referer: this.baseUrl,
@@ -258,7 +299,7 @@ streamKeys.forEach(key => {
       }
     });
   }
-});
+}
 
     if (!streams.length) {
       logger.error("Porntrex: no working streams found");
