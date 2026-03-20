@@ -224,7 +224,7 @@ class XhamsterProvider extends Provider {
         'movie',
         title,
         poster,
-        { videoPageUrl },
+        { videoPageUrl }
       ),
     );
 
