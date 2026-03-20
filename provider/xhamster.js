@@ -60,7 +60,15 @@ class XhamsterProvider extends Provider {
   }
 
   const data = await fetchWithRetry(
-    (u) => super.fetchHtml(u),
+    (u) => super.fetchHtml(u, {
+  headers: {
+    'user-agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+    'accept': 'text/html,application/xhtml+xml',
+    'accept-language': 'en-US,en;q=0.9',
+    'referer': this.baseUrl + '/',
+  }
+}),
     url
   );
 
@@ -333,7 +341,8 @@ if (streamUrl && !streamUrl.startsWith('http')) {
 
     return {
       ...stream,
-      url:stream.url,
+      url: stream.url || url,
+      type: 'hls',
 headers: {
       'referer': this.baseUrl + '/',
       'origin': this.baseUrl,
