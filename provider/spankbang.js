@@ -212,7 +212,6 @@ items.each((index, element) => {
   // 🔥 3. Global dedupe (across categories)
   if (globalSeen.has(link)) return;
   globalSeen.add(link);
-      const img = $e.find('img');
  
   
       const img = $e.find('img');
