@@ -130,8 +130,8 @@ if (url.includes('/categories/')) {
   async resolveStream(url) {
   try {
     const res = await fetch(url, {
-      method: "GET", // 🔥 HEAD sometimes fails
-      redirect: "manual",
+      method: "GET",
+      redirect: "follow",
       headers: {
         'User-Agent': 'Mozilla/5.0',
         'Referer': this.baseUrl,
@@ -139,15 +139,8 @@ if (url.includes('/categories/')) {
       }
     });
 
-    const location = res.headers.get("location");
-
-    if (location) {
-      logger.debug(`REDIRECT FOUND → ${location}`);
-      return location.startsWith('//') ? 'https:' + location : location;
-    }
-
-    logger.debug(`NO REDIRECT → using original`);
-    return url;
+    logger.debug(`FINAL RESOLVED URL: ${res.url}`);
+    return res.url;
 
   } catch (err) {
     logger.error("Resolve failed:", err);
@@ -217,6 +210,10 @@ if (url.includes('/categories/')) {
     const embedUrl = `${this.baseUrl}embed/${videoId}`;
     const embedHtml = await this.fetchHtml(embedUrl);
 
+logger.debug(`EMBED HTML LENGTH: ${embedHtml.length}`);
+logger.debug(`CHECK hls_url: ${embedHtml.includes('hls_url')}`);
+logger.debug(`CHECK alt_url: ${embedHtml.includes('video_alt_url')}`);
+
     const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
     const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
 
@@ -226,6 +223,40 @@ if (url.includes('/categories/')) {
     if (poster && poster.startsWith("//")) {
       poster = "https:" + poster;
     }
+
+/* =========================
+   🔥 PRIORITY: HLS STREAM
+========================= */
+const hlsMatch = embedHtml.match(/hls_url:\s*'([^']+)'/);
+
+if (hlsMatch && hlsMatch[1]) {
+  let hlsUrl = hlsMatch[1];
+
+  if (hlsUrl.startsWith("//")) {
+    hlsUrl = "https:" + hlsUrl;
+  }
+
+  logger.debug(`HLS MASTER FOUND: ${hlsUrl}`);
+
+  const hlsStreams = await this.extractHlsStreams(hlsUrl);
+
+  if (hlsStreams.length) {
+    logger.debug(`USING HLS STREAMS`);
+
+    return {
+      metaResponse: new meta.MetaResponse(
+        id,
+        "movie",
+        title,
+        {
+          description: title,
+          background: poster
+        }
+      ),
+      streams: hlsStreams
+    };
+  }
+}
 
     /* =========================
        ✅ ONLY ALT URLS (REAL STREAMS)
@@ -276,6 +307,11 @@ for (const resolved of resolvedUrls) {
   logger.debug(`RESOLVED STREAM: ${resolved}`);
 
   if (!resolved) continue;
+
+if (resolved.includes('get_file')) {
+  logger.debug(`SKIPPING PROTECTED URL: ${resolved}`);
+  continue;
+}
 
   // 🔥 HLS SUPPORT
   if (resolved.includes('.m3u8')) {
