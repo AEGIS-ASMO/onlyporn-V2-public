@@ -210,6 +210,10 @@ if (url.includes('/categories/')) {
     const embedUrl = `${this.baseUrl}embed/${videoId}`;
     const embedHtml = await this.fetchHtml(embedUrl);
 
+console.log("========== EMBED HTML START ==========");
+console.log(embedHtml);
+console.log("========== EMBED HTML END ==========");
+
 logger.debug(`EMBED HTML LENGTH: ${embedHtml.length}`);
 logger.debug(`CHECK hls_url: ${embedHtml.includes('hls_url')}`);
 logger.debug(`CHECK alt_url: ${embedHtml.includes('video_alt_url')}`);
