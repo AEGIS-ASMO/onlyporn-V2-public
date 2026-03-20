@@ -6,8 +6,6 @@ const Provider = require('./provider');
 // 🚀 SIMPLE MEMORY CACHE
 const hlsCache = new Map();
 const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
-// 🔥 GLOBAL DEDUPE
-const globalSeenMap = new Map();
 
 const pathMappings = {
   'trending': '/trending_videos/',
@@ -201,21 +199,11 @@ items.each((index, element) => {
   if (seen.has(link)) return;
   seen.add(link);
  
-  // ✅ Get set per catalog URL
-if (!globalSeenMap.has(currentUrl)) {
-  globalSeenMap.set(currentUrl, new Set());
-}
+  // ✅ Prevent memory leak
+  if (globalSeen.size > 5000) {
+    globalSeen.clear();
+  }
 
-const pageSeen = globalSeenMap.get(currentUrl);
-
-// Optional cleanup (prevents memory leak)
-if (globalSeenMap.size > 50) {
-  globalSeenMap.clear();
-}
-
-// ✅ Per-page dedupe instead of global
-if (pageSeen.has(link)) return;
-pageSeen.add(link);
       const img = $e.find('img');
 
       let poster =
