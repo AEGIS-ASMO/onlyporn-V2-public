@@ -136,7 +136,16 @@ async resolveStream(url) {
 const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
 const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
 
-  const match = embedHtml.match(/video_url:\s*'([^']+)'/);
+  const urls = [];
+
+const main = embedHtml.match(/video_url:\s*'([^']+)'/);
+if (main) urls.push(main[1]);
+
+const alt1 = embedHtml.match(/video_alt_url:\s*'([^']+)'/);
+if (alt1) urls.push(alt1[1]);
+
+const alt2 = embedHtml.match(/video_alt_url2:\s*'([^']+)'/);
+if (alt2) urls.push(alt2[1]);
 
   if (!match) {
     logger.error("Porntrex: video_url not found");
@@ -171,7 +180,9 @@ return {
       background: poster
     }
   ),
-  videoPageUrl: finalStream
+  streams: urls.map(u => ({
+    url: u.startsWith('//') ? 'https:' + u : u
+  }))
 };
 }
 
