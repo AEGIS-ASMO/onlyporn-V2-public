@@ -35,9 +35,14 @@ getSegmentFromUrl(url) {
     return `${this.baseUrl}search/${encodeURIComponent(keyword)}/`;
   }
 
-  handleGenre(args) {
-    return this.handleSearch({ ...args, extra: { search: args.extra.genre } });
-  }
+  handleGenre({ extra: { genre } }) {
+  const slug = genre
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9\-]/g, '');
+
+  return `${this.baseUrl}categories/${slug}/`;
+}
 
   handlePagination(url, { extra: { skip } }) {
   const page = this.page(skip);
@@ -49,6 +54,10 @@ if (url.includes('/search/')) {
   const keywordMatch = url.match(/search\/([^\/]+)/);
   const keyword = keywordMatch ? keywordMatch[1] : '';
   return `${this.baseUrl}search/${keyword}/?mode=async&function=get_block&block_id=list_videos_common_videos_list&from=${from}`;
+}
+
+if (url.includes('/categories/')) {
+  return `${url}?mode=async&function=get_block&block_id=list_videos_common_videos_list_category&from=${from}`;
 }
 
   const segment = this.getSegmentFromUrl(url);
