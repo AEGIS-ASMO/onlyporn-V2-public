@@ -249,7 +249,11 @@ const uniqueId = `${currentUrl}::${link}::${index}`;
   async getMetadata(args) {
   logger.debug({ args }, 'getMetadata');
 
-  const { extra: { videoPageUrl } } = args;
+  const { id } = args;
+
+  const [, link] = id.split('::');
+
+  const videoPageUrl = this.baseUrl + link; // ✅ FIX
 
   return this.fetchHtml(videoPageUrl)
     .then(html => this.parseVideoPage({ id: videoPageUrl, html }))
