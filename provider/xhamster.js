@@ -3,6 +3,31 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
+/* =========================
+   ✅ ADDED: delay + retry
+========================= */
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchWithRetry(instance, url, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      // random delay (2–4 sec)
+      await delay(2000 + Math.random() * 2000);
+
+      return await instance(url);
+    } catch (err) {
+      if (err.response?.status === 429) {
+        logger.warn(`429 hit, retrying (${i + 1})...`);
+        await delay(5000 * (i + 1)); // backoff
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  throw new Error('Max retries reached');
+}
+
 const pathMappings = {
   'Best (Daily)': '/best/daily',
   'Best (Weekly)': '/best/weekly',
@@ -17,6 +42,16 @@ class XhamsterProvider extends Provider {
 
   static create() {
     return new XhamsterProvider();
+  }
+
+  /* =========================
+     ✅ OVERRIDE fetchHtml ONLY
+  ========================= */
+  async fetchHtml(url) {
+    return fetchWithRetry(
+      (u) => super.fetchHtml(u),
+      url
+    );
   }
 
   getInitialUrl(catalogId) {
@@ -37,7 +72,6 @@ class XhamsterProvider extends Provider {
 
   handleGenre({ id, extra: { genre } }) {
 
-  // ✅ 1. Best filters (keep 4k support ONLY here)
   if (pathMappings[genre]) {
     let path = '';
 
@@ -50,7 +84,6 @@ class XhamsterProvider extends Provider {
     return this.baseUrl + path;
   }
 
-  // 🔥 2. Categories (NEVER use /4k here)
   if (genre) {
     const slug = genre
       .toLowerCase()
@@ -61,28 +94,23 @@ class XhamsterProvider extends Provider {
     return `${this.baseUrl}/categories/${slug}`;
   }
 
-  // fallback
   return this.getInitialUrl(id);
 }
 
   handlePagination(url, { extra: { skip } }) {
   const page = this.page(skip);
-if (!page || page === '1') return url;
+  if (!page || page === '1') return url;
 
   try {
     const u = new URL(url);
 
-    // remove trailing slash
     let pathname = u.pathname.replace(/\/$/, '');
-
-    // remove existing page if already present
     pathname = pathname.replace(/\/\d+$/, '');
 
     u.pathname = `${pathname}/${page}/`;
 
     return u.toString();
   } catch (e) {
-    // fallback (should rarely happen)
     return `${url.replace(/\/$/, '')}/${page}/`;
   }
 }
@@ -94,9 +122,6 @@ if (!page || page === '1') return url;
 
   const metadataList = [];
 
-  /* =========================
-     🔥 1. TRY JSON FIRST
-  ========================= */
   const match = html.match(/window\.initials\s*=\s*(\{.*?\});/s);
 
   if (match) {
@@ -125,17 +150,13 @@ if (!page || page === '1') return url;
       }
 
       if (metadataList.length > 0) {
-        return metadataList; // ✅ SUCCESS (fast path)
+        return metadataList;
       }
 
     } catch (e) {
       logger.error('JSON parse failed', e);
     }
   }
-
-  /* =========================
-     🧱 2. FALLBACK (your old DOM)
-  ========================= */
 
   const $ = load(html);
   let count = 0;
@@ -196,7 +217,6 @@ if (!page || page === '1') return url;
 
   let { id } = args;
 
-  // Fix: ensure id is a full URL
   if (!id.startsWith('http')) {
     id = this.baseUrl + id;
   }
@@ -264,7 +284,6 @@ if (sources?.hls?.h264?.url) {
   streamUrl = sources.mp4.medium.url;
 }
 
-/* FIX: ignore invalid tokens */
 if (streamUrl && !streamUrl.startsWith('http')) {
   streamUrl = null;
 }
@@ -273,21 +292,21 @@ if (streamUrl && !streamUrl.startsWith('http')) {
       json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
 
     if (!streamUrl) {
-  logger.warn("xHamster: no stream URL found");
-}
+      logger.warn("xHamster: no stream URL found");
+    }
 
-return new meta.MetaResponse(
-  id,
-  Provider.TYPE,
-  title,
-  {
-    videoPageUrl: streamUrl,
-    description,
-    poster,
-    background: poster,
-    genres: tags,
-  },
-);
+    return new meta.MetaResponse(
+      id,
+      Provider.TYPE,
+      title,
+      {
+        videoPageUrl: streamUrl,
+        description,
+        poster,
+        background: poster,
+        genres: tags,
+      },
+    );
   }
 
   transformStream(url, stream) {
