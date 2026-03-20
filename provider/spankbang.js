@@ -247,17 +247,17 @@ const uniqueId = `${currentUrl}::${link}::${index}`;
   }
 
   async getMetadata(args) {
-    logger.debug({ args }, 'getMetadata');
+  logger.debug({ args }, 'getMetadata');
 
-    const { id } = args;
+  const { extra: { videoPageUrl } } = args;
 
-    return this.fetchHtml(id)
-      .then(html => this.parseVideoPage({ id, html }))
-      .catch((error) => {
-        logger.error({ error, args }, 'getMetadata error');
-        throw error;
-      });
-  }
+  return this.fetchHtml(videoPageUrl)
+    .then(html => this.parseVideoPage({ id: videoPageUrl, html }))
+    .catch((error) => {
+      logger.error({ error, args }, 'getMetadata error');
+      throw error;
+    });
+}
 
   async parseVideoPage({ html }) {
     const $ = load(html);
