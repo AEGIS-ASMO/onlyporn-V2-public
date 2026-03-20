@@ -7,7 +7,7 @@ const Provider = require('./provider');
 const hlsCache = new Map();
 const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
 // 🔥 GLOBAL DEDUPE
-const globalSeen = new Set();
+const globalSeenMap = new Map();
 
 const pathMappings = {
   'trending': '/trending_videos/',
@@ -72,9 +72,6 @@ if (html.includes('cf-chl') || html.includes('Just a moment')) {
 
   handleGenre({ extra }) {
   const { genre } = extra;
-
-// 🔥 RESET ONLY WHEN USER CHANGES CATEGORY
-  globalSeen.clear();
 
   if (!genre) return this.getInitialUrl();
 
@@ -186,7 +183,7 @@ keyword = keyword.toLowerCase();
     const metadataList = [];
     const $ = load(html);
 
-    const items = $('a[href*="/video"]');
+    const items = $('a.thumb, a.video-item, .video-item a, a[href*="/video"]');
 
     const seen = new Set();
 
@@ -203,17 +200,22 @@ items.each((index, element) => {
   // 🔥 2. Local dedupe (same page)
   if (seen.has(link)) return;
   seen.add(link);
-// ✅ Prevent memory leak
-  if (globalSeen.size > 2000) {
-  // remove oldest instead of clearing all
-  globalSeen.delete(globalSeen.values().next().value);
+ 
+  // ✅ Get set per catalog URL
+if (!globalSeenMap.has(currentUrl)) {
+  globalSeenMap.set(currentUrl, new Set());
 }
 
-  // 🔥 3. Global dedupe (across categories)
-  if (globalSeen.has(link)) return;
-  globalSeen.add(link);
- 
-  
+const pageSeen = globalSeenMap.get(currentUrl);
+
+// Optional cleanup (prevents memory leak)
+if (globalSeenMap.size > 50) {
+  globalSeenMap.clear();
+}
+
+// ✅ Per-page dedupe instead of global
+if (pageSeen.has(link)) return;
+pageSeen.add(link);
       const img = $e.find('img');
 
       let poster =
