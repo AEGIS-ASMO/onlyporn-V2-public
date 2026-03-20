@@ -146,10 +146,15 @@ async extractHlsStreams(masterUrl) {
           }
 
           streams.push({
-            url: streamUrl,
-            name: `${height}p`,
-            type: Provider.TYPE,
-          });
+  url: streamUrl,
+  name: `${height}p`,
+  type: Provider.TYPE,
+  headers: {
+    Referer: 'https://porntrex.com/',
+    Origin: 'https://porntrex.com',
+    'User-Agent': 'Mozilla/5.0',
+  },
+});
         }
       }
     }
@@ -192,6 +197,7 @@ async extractHlsStreams(masterUrl) {
   const urls = [];
 
   const patterns = [
+    /hls_url:\s*'([^']+)'/,
     /video_url:\s*'([^']+)'/,
     /video_alt_url:\s*'([^']+)'/,
     /video_alt_url2:\s*'([^']+)'/,
