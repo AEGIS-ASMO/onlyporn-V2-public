@@ -174,7 +174,18 @@ if (url.includes('/categories/')) {
       if (line.startsWith('#EXT-X-STREAM-INF')) {
 
         const resMatch = line.match(/RESOLUTION=\d+x(\d+)/);
-        const height = resMatch ? resMatch[1] : 'auto';
+        let height = resMatch ? parseInt(resMatch[1]) : 0;
+
+// 🔥 fallback using bandwidth (for 4K detection)
+const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/);
+if (!height && bandwidthMatch) {
+  const bw = parseInt(bandwidthMatch[1]);
+
+  if (bw > 8000000) height = 2160;
+  else if (bw > 5000000) height = 1080;
+  else if (bw > 2500000) height = 720;
+  else if (bw > 1000000) height = 480;
+}
 
         let streamUrl = lines[i + 1];
         if (!streamUrl) continue;
@@ -186,7 +197,7 @@ if (url.includes('/categories/')) {
 
         streams.push({
           url: streamUrl.trim(),
-          name: height !== 'auto' ? `${height}p` : 'auto',
+          name: height ? `${height}p` : 'auto',
           type: Provider.TYPE,
           behaviorHints: {
             notWebReady: true,
@@ -271,11 +282,6 @@ console.log(hlsUrl);
 
   if (hlsStreams.length) {
   logger.debug(`USING HLS STREAMS`);
-
-  const bestStream = hlsStreams.sort((a, b) => {
-    const getQ = s => parseInt(s.name) || 0;
-    return getQ(b) - getQ(a);
-  })[0];
 
   return {
   metaResponse: new meta.MetaResponse(
@@ -380,6 +386,10 @@ const resolvedUrls = await Promise.all(
 );
 
 let streams = [];
+const getQuality = (url) => {
+  const match = url.match(/(\d{3,4})p/);
+  return match ? match[1] + 'p' : 'auto';
+};
 
 for (const resolved of resolvedUrls) {
 
@@ -387,10 +397,7 @@ for (const resolved of resolvedUrls) {
 
   if (!resolved) continue;
 
-const getQuality = (url) => {
-  const match = url.match(/(\d{3,4})p/);
-  return match ? match[1] + 'p' : 'auto';
-};
+
 
   // 🔥 HLS SUPPORT
   if (resolved.includes('.m3u8')) {
