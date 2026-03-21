@@ -4,13 +4,17 @@ const { meta } = require('../model');
 const Provider = require('./provider');
 const fetch = require("node-fetch");
 const getQuality = (url) => {
-  const match = url.match(/(\d{3,4})p/);
+  if (!url) return 0;
+
+  const match = url.match(/(\d{3,4})(p|P)?/);
   if (match) return parseInt(match[1]);
 
-  // fallback using bitrate hints
-  if (url.includes('4k') || url.includes('2160')) return 2160;
+  if (url.includes('2160') || url.includes('4k')) return 2160;
+  if (url.includes('1440')) return 1440;
   if (url.includes('1080')) return 1080;
   if (url.includes('720')) return 720;
+  if (url.includes('480')) return 480;
+  if (url.includes('360')) return 360;
 
   return 0;
 };
@@ -138,30 +142,26 @@ if (url.includes('/categories/')) {
     return jsonString;
   }
 
-  async resolveStream(url) {
+  async resolveStream(url, options = {}) {
   try {
     let current = url;
 
     for (let i = 0; i < 4; i++) {
       const res = await fetch(current, {
         method: "GET",
-        redirect: "follow",
+        redirect: "manual", // 🔥 important
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Referer': this.baseUrl,
-          'Origin': this.baseUrl
+          'Origin': this.baseUrl,
+          ...(options.headers || {}) // ✅ allow custom headers
         }
       });
 
       const location = res.headers.get("location");
 
       if (!location) {
-        // fallback: some CDNs block HEAD → try GET once
-        if (i === 0) {
-          const getRes = await fetch(current, { method: "GET" });
-          return getRes.url;
-        }
-        break;
+        return current;
       }
 
       current = location.startsWith('http')
@@ -182,7 +182,13 @@ if (url.includes('/categories/')) {
   // kept (not used here anymore)
   async extractHlsStreams(masterUrl) {
     try {
-      const res = await fetch(masterUrl);
+      const res = await fetch(masterUrl, {
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+  }
+});
       const text = await res.text();
 
       const lines = text.split('\n');
@@ -228,107 +234,105 @@ if (url.includes('/categories/')) {
   }
 
   async parseVideoPage({ id, html }) {
+  const videoIdMatch = id.match(/\d+/);
+  if (!videoIdMatch) return null;
 
+  const videoId = videoIdMatch[0];
+  const embedUrl = `${this.baseUrl}embed/${videoId}`;
+  const embedHtml = await this.fetchHtml(embedUrl);
 
+  logger.debug(`EMBED HTML LENGTH: ${embedHtml.length}`);
 
-    const videoIdMatch = id.match(/\d+/);
-    if (!videoIdMatch) return null;
+  // Video title & poster
+  const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
+  const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
 
-    const videoId = videoIdMatch[0];
+  const title = titleMatch ? titleMatch[1] : "Porntrex Video";
 
-    const embedUrl = `${this.baseUrl}embed/${videoId}`;
-    const embedHtml = await this.fetchHtml(embedUrl);
+  let poster = previewMatch ? previewMatch[1] : null;
+  if (poster && poster.startsWith("//")) poster = "https:" + poster;
 
-console.log("========== EMBED HTML START ==========");
-console.log(embedHtml);
-console.log("========== EMBED HTML END ==========");
+  // 🔥 MP4 direct extraction
+const fileMatches = embedHtml.match(/\/get_file\/[^']+\.mp4[^']*/g) || [];
 
-logger.debug(`EMBED HTML LENGTH: ${embedHtml.length}`);
-logger.debug(`CHECK hls_url: ${embedHtml.includes('hls_url')}`);
-logger.debug(`CHECK alt_url: ${embedHtml.includes('video_alt_url')}`);
+// 🔥 fallback alt URLs
+const altMatches = [
+  ...embedHtml.matchAll(/video_alt_url\d*:\s*'([^']+)'/g)
+].map(m => m[1]);
 
-    const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
-    const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
-
-    const title = titleMatch ? titleMatch[1] : "Porntrex Video";
-
-    let poster = previewMatch ? previewMatch[1] : null;
-    if (poster && poster.startsWith("//")) {
-      poster = "https:" + poster;
-    }
-
-/* =========================
-   🎯 PRIMARY: DIRECT MP4
-========================= */
-const videoUrlMatch = embedHtml.match(/video_url:\s*'([^']+)'/);
-
-if (videoUrlMatch && videoUrlMatch[1]) {
-  let baseUrl = videoUrlMatch[1];
-
-  if (baseUrl.startsWith("//")) {
-    baseUrl = "https:" + baseUrl;
+let rawUrls = [...fileMatches, ...altMatches].map(url => {
+  if (url.startsWith("//")) return "https:" + url;
+  if (!url.startsWith("http")) {
+    return this.baseUrl.replace(/\/$/, '') + url;
   }
+  return url;
+});
 
-  logger.debug(`BASE MP4 FOUND: ${baseUrl}`);
-
-  // Extract videoId
-  const idMatch = baseUrl.match(/\/(\d+)(?:_\d+p)?\.mp4/);
-  if (!idMatch) {
-    logger.error("Failed to extract videoId");
+  if (!rawUrls.length) {
+    logger.error("Porntrex: no candidate streams found");
     return null;
   }
 
-  // 🔥 Extract real get_file URLs directly from embed
-const fileMatches = embedHtml.match(/\/get_file\/[^']+\.mp4[^']*/g) || [];
+  // Resolve each URL respecting signed CDN headers
+  const resolvedUrls = await Promise.all(
+    rawUrls.map(url => this.resolveStream(url, {
+      headers: {
+        Referer: this.baseUrl,
+        Origin: this.baseUrl,
+        'User-Agent': 'Mozilla/5.0',
+        Cookie: 'kt_tcookie=1; confirmed=true'
+      }
+    }).catch(() => null))
+  );
 
-let streams = [];
+  const validUrls = resolvedUrls.filter(Boolean);
+  if (!validUrls.length) return null;
 
-const results = await Promise.all(
-  fileMatches.map(async (raw) => {
-    let url = raw;
-
-    if (!url.startsWith('http')) {
-      url = this.baseUrl.replace(/\/$/, '') + url;
+  // Prepare final streams
+  let streams = await Promise.all(validUrls.map(async url => {
+    if (url.includes('.m3u8')) {
+      // HLS variant
+      return await this.extractHlsStreams(url);
     }
+    // MP4 variant
+    const q = getQuality(url);
 
-    try {
-      const resolved = await this.resolveStream(url);
-
-      if (!resolved || !resolved.includes('.mp4')) return null;
-
-      return {
-        url: resolved,
-        name: `Porntrex ${getQuality(resolved)}`,
-        title: `${getQuality(resolved)}p`,
-        behaviorHints: {
-          notWebReady: true,
-          headers: {
-            Referer: this.baseUrl,
-            Origin: this.baseUrl,
-            'User-Agent': 'Mozilla/5.0'
-          }
-        }
-      };
-
-    } catch (err) {
-      logger.debug(`FAILED: ${url}`);
-      return null;
+return [{
+  url,
+  name: q ? `${q}p` : "MP4",
+  title: q ? `${q}p` : "Unknown",
+  type: Provider.TYPE,
+  behaviorHints: {
+    notWebReady: true,
+    headers: {
+      Referer: this.baseUrl,
+      Origin: this.baseUrl,
+      'User-Agent': 'Mozilla/5.0',
+      Cookie: 'kt_tcookie=1; confirmed=true'
     }
-  })
-);
+  }
+}];
+  }));
 
-streams = results.filter(Boolean);
+  streams = streams.flat();
 
-  // Deduplicate
+  // Deduplicate by URL
   const seen = new Set();
   streams = streams.filter(s => {
-    if (seen.has(s.url)) return false;
-    seen.add(s.url);
+    const u = s.url;
+    if (seen.has(u)) return false;
+    seen.add(u);
     return true;
   });
 
-  // Sort by quality
-  streams.sort((a, b) => getQuality(b.url) - getQuality(a.url));
+  // Sort: HLS first, then MP4 by descending quality
+  streams.sort((a, b) => {
+    const aIsHls = a.url.includes('.m3u8');
+    const bIsHls = b.url.includes('.m3u8');
+    if (aIsHls && !bIsHls) return -1;
+    if (!aIsHls && bIsHls) return 1;
+    return getQuality(b.url) - getQuality(a.url);
+  });
 
   if (!streams.length) return null;
 
@@ -340,160 +344,6 @@ streams = results.filter(Boolean);
     streams
   };
 }
-
-/* =========================
-   🔥 PRIORITY: HLS STREAM
-========================= */
-const hlsMatch = embedHtml.match(/hls_url:\s*'([^']+)'/);
-
-if (hlsMatch && hlsMatch[1]) {
-  let hlsUrl = hlsMatch[1];
-
-  if (hlsUrl.startsWith("//")) {
-    hlsUrl = "https:" + hlsUrl;
-  }
-
-  logger.debug(`HLS FOUND: ${hlsUrl}`);
-
-  // 🔥 Extract all quality variants from m3u8
-  const hlsStreams = await this.extractHlsStreams(hlsUrl);
-
-  if (hlsStreams.length) {
-    return {
-      metaResponse: new meta.MetaResponse(id, "movie", title, {
-        description: title,
-        background: poster
-      }),
-      streams: hlsStreams
-    };
-  }
-
-  // ⚠️ fallback if parsing fails
-  return {
-    metaResponse: new meta.MetaResponse(id, "movie", title, {
-      description: title,
-      background: poster
-    }),
-    streams: [
-      {
-        url: hlsUrl,
-        name: "HLS Auto",
-        title: "Adaptive",
-        type: Provider.TYPE,
-        behaviorHints: {
-          notWebReady: true,
-          headers: {
-            Referer: this.baseUrl,
-            Origin: this.baseUrl,
-            'User-Agent': 'Mozilla/5.0'
-          }
-        }
-      }
-    ]
-  };
-}
-
-
-    /* =========================
-       ✅ ONLY ALT URLS (REAL STREAMS)
-    ========================= */
-    const streamKeys = [
-  'video_alt_url',
-  'video_alt_url2',
-  'video_alt_url3',
-  'video_alt_url4',
-  'video_alt_url5',
-];
-
-let rawUrls = [];
-
-streamKeys.forEach(key => {
-  const match = embedHtml.match(new RegExp(`${key}:\\s*'([^']+)'`));
-
-  if (match && match[1]) {
-    let url = match[1];
-
-    if (url.startsWith("//")) {
-      url = "https:" + url;
-    } else if (!url.startsWith("http")) {
-      url = this.baseUrl.replace(/\/$/, '') + url;
-    }
-
-    // 🔥 FILTER BAD URLs
-    if (
-      url.includes('/video/') ||
-      url.includes('embed') ||
-      url.endsWith('.jpg')
-    ) {
-      logger.debug(`SKIPPED FAKE: ${url}`);
-      return;
-    }
-
-    rawUrls.push(url);
-  }
-});
-
-const resolvedUrls = await Promise.all(
-  rawUrls.map(url => this.resolveStream(url))
-);
-
-const valid = resolvedUrls.filter(Boolean);
-
-if (!valid.length) {
-  logger.error("Porntrex: no valid streams");
-  return null;
-}
-
-// ⚡ parallel extraction
-const streamResults = await Promise.all(valid.map(async (url) => {
-  if (typeof url === 'string' && url.includes('.m3u8')) {
-    return await this.extractHlsStreams(url);
-  }
-  return [{ url }];
-}));
-
-let streams = streamResults.flat();
-
-// ✅ dedupe
-const seen = new Set();
-streams = streams.filter(s => {
-  const u = s.url || s;
-  if (seen.has(u)) return false;
-  seen.add(u);
-  return true;
-});
-
-if (!streams.length) return null;
-
-// ✅ smart sorting
-streams.sort((a, b) => {
-  const urlA = a.url || a;
-  const urlB = b.url || b;
-
-  if (urlA.includes('.m3u8')) return -1;
-  if (urlB.includes('.m3u8')) return 1;
-
-  return getQuality(urlB) - getQuality(urlA);
-});
-
-const best = streams[0].url || streams[0];
-
-return {
-  metaResponse: new meta.MetaResponse(id, "movie", title, {
-    description: title,
-    background: poster
-  }),
-  videoPageUrl: best,
-  behaviorHints: {
-    notWebReady: true,
-    headers: {
-  'User-Agent': 'Mozilla/5.0',
-  'Referer': this.baseUrl,
-  'Origin': this.baseUrl,
-  'Cookie': 'kt_tcookie=1; confirmed=true;'
-}
-  }
-};
 }
 
 }
