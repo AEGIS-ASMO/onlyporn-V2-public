@@ -367,17 +367,23 @@ streamKeys.forEach(key => {
   const match = embedHtml.match(new RegExp(`${key}:\\s*'([^']+)'`));
 
   if (match && match[1]) {
-    let url = match[1];
+  let url = match[1];
 
-    if (url.startsWith("//")) {
-      url = "https:" + url;
-    } else if (!url.startsWith("http")) {
-      url = this.baseUrl.replace(/\/$/, '') + url;
-    }
-
-    logger.debug(`RAW STREAM [${key}]: ${url}`);
-    rawUrls.push(url);
+  if (url.startsWith("//")) {
+    url = "https:" + url;
+  } else if (!url.startsWith("http")) {
+    url = this.baseUrl.replace(/\/$/, '') + url;
   }
+
+  // 🔥 FILTER FAKE ALT URLS HERE
+  if (url.includes('/video/')) {
+    logger.debug(`SKIPPING FAKE ALT URL: ${url}`);
+    return;
+  }
+
+  logger.debug(`RAW STREAM [${key}]: ${url}`);
+  rawUrls.push(url);
+}
 });
 
 if (!rawUrls.length) {
