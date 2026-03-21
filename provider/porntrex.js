@@ -256,16 +256,15 @@ return {
       background: poster
     }
   ),
-  streams: [{
-    url: finalStream,
-    name: '480p',
-    type: Provider.TYPE,
-    headers: {
-      Referer: this.baseUrl,
-      Origin: this.baseUrl,
-      'User-Agent': 'Mozilla/5.0',
-    }
-  }]
+  videoPageUrl: finalStream,
+behaviorHints: {
+  notWebReady: true,
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+  }
+}
 };
 }
 
@@ -286,22 +285,36 @@ if (hlsMatch && hlsMatch[1]) {
   const hlsStreams = await this.extractHlsStreams(hlsUrl);
 
   if (hlsStreams.length) {
-    logger.debug(`USING HLS STREAMS`);
+  logger.debug(`USING HLS STREAMS`);
 
-    return {
-      metaResponse: new meta.MetaResponse(
-        id,
-        "movie",
-        title,
-        {
-          description: title,
-          background: poster
-        }
-      ),
-      streams: hlsStreams
-    };
+  const bestStream = hlsStreams.sort((a, b) => {
+    const getQ = s => parseInt(s.name) || 0;
+    return getQ(b) - getQ(a);
+  })[0];
+
+  return {
+    metaResponse: new meta.MetaResponse(
+      id,
+      "movie",
+      title,
+      {
+        description: title,
+        background: poster
+      }
+    ),
+    videoPageUrl: bestStream?.url,
+behaviorHints: {
+  notWebReady: true,
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+   }
   }
+ };
 }
+}
+
 
     /* =========================
        ✅ ONLY ALT URLS (REAL STREAMS)
@@ -397,17 +410,25 @@ for (const resolved of resolvedUrls) {
 });
 
     return {
-      metaResponse: new meta.MetaResponse(
-        id,
-        "movie",
-        title,
-        {
-          description: title,
-          background: poster
-        }
-      ),
-      streams
-    };
+  metaResponse: new meta.MetaResponse(
+    id,
+    "movie",
+    title,
+    {
+      description: title,
+      background: poster
+    }
+  ),
+  videoPageUrl: streams[0]?.url,
+behaviorHints: {
+  notWebReady: true,
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+  }
+}
+};
   }
 
 }
