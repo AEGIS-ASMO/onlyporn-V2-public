@@ -129,24 +129,38 @@ if (url.includes('/categories/')) {
 
   async resolveStream(url) {
   try {
-    const res = await fetch(url, {
-      method: "HEAD",
-      redirect: "manual",
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-        'Referer': this.baseUrl,
-        'Origin': this.baseUrl
+    let current = url;
+
+    for (let i = 0; i < 4; i++) {
+      const res = await fetch(current, {
+        method: "HEAD",
+        redirect: "manual",
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Referer': this.baseUrl,
+          'Origin': this.baseUrl
+        }
+      });
+
+      const location = res.headers.get("location");
+
+      if (!location) {
+        // fallback: some CDNs block HEAD → try GET once
+        if (i === 0) {
+          const getRes = await fetch(current, { method: "GET" });
+          return getRes.url;
+        }
+        break;
       }
-    });
 
-    const location = res.headers.get("location");
+      current = location.startsWith('http')
+        ? location
+        : new URL(location, current).href;
 
-    if (location) {
-      logger.debug(`REDIRECT RESOLVED: ${location}`);
-      return location;
+      logger.debug(`REDIRECT → ${current}`);
     }
 
-    return url;
+    return current;
 
   } catch (err) {
     logger.error("Resolve failed:", err);
@@ -204,6 +218,18 @@ if (url.includes('/categories/')) {
 
   async parseVideoPage({ id, html }) {
 
+const getQuality = (url) => {
+  const match = url.match(/(\d{3,4})p/);
+  if (match) return parseInt(match[1]);
+
+  // fallback using bitrate hints
+  if (url.includes('4k') || url.includes('2160')) return 2160;
+  if (url.includes('1080')) return 1080;
+  if (url.includes('720')) return 720;
+
+  return 0;
+};
+
     const videoIdMatch = id.match(/\d+/);
     if (!videoIdMatch) return null;
 
@@ -242,30 +268,25 @@ if (videoUrlMatch && videoUrlMatch[1]) {
     videoUrl = "https:" + videoUrl;
   }
 
-  logger.debug(`DIRECT VIDEO FOUND: ${videoUrl}`);
+  logger.debug(`MP4 FOUND: ${videoUrl}`);
 
-  const finalStream = await this.resolveStream(videoUrl);
+  const final = await this.resolveStream(videoUrl);
 
-return {
-  metaResponse: new meta.MetaResponse(
-    id,
-    "movie",
-    title,
-    {
+  return {
+    metaResponse: new meta.MetaResponse(id, "movie", title, {
       description: title,
       background: poster
+    }),
+    videoPageUrl: final,
+    behaviorHints: {
+      notWebReady: true,
+      headers: {
+        Referer: this.baseUrl,
+        Origin: this.baseUrl,
+        'User-Agent': 'Mozilla/5.0'
+      }
     }
-  ),
-  videoPageUrl: finalStream,
-behaviorHints: {
-  notWebReady: true,
-  headers: {
-    Referer: this.baseUrl,
-    Origin: this.baseUrl,
-    'User-Agent': 'Mozilla/5.0'
-  }
-}
-};
+  };
 }
 
 /* =========================
@@ -280,38 +301,23 @@ if (hlsMatch && hlsMatch[1]) {
     hlsUrl = "https:" + hlsUrl;
   }
 
-  logger.debug(`HLS MASTER FOUND: ${hlsUrl}`);
-
-  const hlsStreams = await this.extractHlsStreams(hlsUrl);
-
-  if (hlsStreams.length) {
-  logger.debug(`USING HLS STREAMS`);
-
-  const bestStream = hlsStreams.sort((a, b) => {
-    const getQ = s => parseInt(s.name) || 0;
-    return getQ(b) - getQ(a);
-  })[0];
+  logger.debug(`HLS FOUND: ${hlsUrl}`);
 
   return {
-    metaResponse: new meta.MetaResponse(
-      id,
-      "movie",
-      title,
-      {
-        description: title,
-        background: poster
+    metaResponse: new meta.MetaResponse(id, "movie", title, {
+      description: title,
+      background: poster
+    }),
+    videoPageUrl: hlsUrl,
+    behaviorHints: {
+      notWebReady: true,
+      headers: {
+        Referer: this.baseUrl,
+        Origin: this.baseUrl,
+        'User-Agent': 'Mozilla/5.0'
       }
-    ),
-    videoPageUrl: bestStream?.url,
-behaviorHints: {
-  notWebReady: true,
-  headers: {
-    Referer: this.baseUrl,
-    Origin: this.baseUrl,
-    'User-Agent': 'Mozilla/5.0'
-   }
-  }
- };
+    }
+  };
 }
 }
 
@@ -341,14 +347,44 @@ streamKeys.forEach(key => {
       url = this.baseUrl.replace(/\/$/, '') + url;
     }
 
-    logger.debug(`RAW STREAM [${key}]: ${url}`);
+    // 🔥 FILTER BAD URLs
+    if (
+      url.includes('/video/') ||
+      url.includes('embed') ||
+      url.endsWith('.jpg')
+    ) {
+      logger.debug(`SKIPPED FAKE: ${url}`);
+      return;
+    }
+
     rawUrls.push(url);
   }
 });
 
-if (!rawUrls.length) {
-  logger.error("Porntrex: no raw URLs found");
-  return null;
+const resolved = await Promise.all(
+  rawUrls.map(url => this.resolveStream(url))
+);
+
+const valid = resolved.filter(Boolean);
+
+if (valid.length) {
+  const best = valid.sort((a, b) => getQuality(b) - getQuality(a))[0];
+
+  return {
+    metaResponse: new meta.MetaResponse(id, "movie", title, {
+      description: title,
+      background: poster
+    }),
+    videoPageUrl: best,
+    behaviorHints: {
+      notWebReady: true,
+      headers: {
+        Referer: this.baseUrl,
+        Origin: this.baseUrl,
+        'User-Agent': 'Mozilla/5.0'
+      }
+    }
+  };
 }
 
 /* =========================
@@ -404,10 +440,7 @@ for (const resolved of resolvedUrls) {
     });
 
     // sort best → worst
-    streams.sort((a, b) => {
-  const getQ = s => parseInt(s.name) || 0;
-  return getQ(b) - getQ(a);
-});
+    streams.sort((a, b) => getQuality(b.url) - getQuality(a.url));
 
     return {
   metaResponse: new meta.MetaResponse(
