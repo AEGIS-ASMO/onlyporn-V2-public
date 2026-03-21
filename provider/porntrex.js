@@ -262,41 +262,82 @@ logger.debug(`CHECK alt_url: ${embedHtml.includes('video_alt_url')}`);
 ========================= */
 const videoUrlMatch = embedHtml.match(/video_url:\s*'([^']+)'/);
 
-const qualityMatch = embedHtml.match(/video_url_text:\s*'([^']+)'/);
-const quality = qualityMatch ? qualityMatch[1] : 'MP4';
-
 if (videoUrlMatch && videoUrlMatch[1]) {
-  let videoUrl = videoUrlMatch[1];
+  let baseUrl = videoUrlMatch[1];
 
-  if (videoUrl.startsWith("//")) {
-    videoUrl = "https:" + videoUrl;
+  if (baseUrl.startsWith("//")) {
+    baseUrl = "https:" + baseUrl;
   }
 
-  logger.debug(`MP4 FOUND: ${videoUrl}`);
+  logger.debug(`BASE MP4 FOUND: ${baseUrl}`);
 
-  const final = await this.resolveStream(videoUrl);
+  // Extract videoId
+  const idMatch = baseUrl.match(/\/(\d+)(?:_\d+p)?\.mp4/);
+  if (!idMatch) {
+    logger.error("Failed to extract videoId");
+    return null;
+  }
+
+  const vid = idMatch[1];
+
+  // Extract base path (before filename)
+  const basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+
+  // 🔥 Known quality ladder
+  const qualities = ['', '_480p', '_720p', '_1080p', '_2160p'];
+
+  let streams = [];
+
+  for (const q of qualities) {
+    const testUrl = `${basePath}${vid}${q}.mp4`;
+
+    try {
+      const res = await fetch(testUrl, { method: "HEAD" });
+
+if (res.ok) {
+  const resolved = await this.resolveStream(testUrl);
+
+      streams.push({
+        url: resolved,
+        name: q ? q.replace('_', '') : 'default',
+        title: q ? q.replace('_', '') : '480p',
+        behaviorHints: {
+          notWebReady: true,
+          headers: {
+            Referer: this.baseUrl,
+            Origin: this.baseUrl,
+            'User-Agent': 'Mozilla/5.0'
+          }
+        }
+      });
+
+      logger.debug(`VALID STREAM: ${testUrl}`);
+
+    } catch (err) {
+      logger.debug(`FAILED: ${testUrl}`);
+    }
+  }
+
+  // Deduplicate
+  const seen = new Set();
+  streams = streams.filter(s => {
+    if (seen.has(s.url)) return false;
+    seen.add(s.url);
+    return true;
+  });
+
+  // Sort by quality
+  streams.sort((a, b) => getQuality(b.url) - getQuality(a.url));
+
+  if (!streams.length) return null;
 
   return {
-  metaResponse: new meta.MetaResponse(id, "movie", title, {
-    description: title,
-    background: poster
-  }),
-  streams: [
-    {
-      url: final,
-      name: `Porntrex ${quality}`,   // 👈 THIS is what you want
-      title: `${quality}`,
-      behaviorHints: {
-        notWebReady: true,
-        headers: {
-          Referer: this.baseUrl,
-          Origin: this.baseUrl,
-          'User-Agent': 'Mozilla/5.0'
-        }
-      }
-    }
-  ]
-};
+    metaResponse: new meta.MetaResponse(id, "movie", title, {
+      description: title,
+      background: poster
+    }),
+    streams
+  };
 }
 
 /* =========================
