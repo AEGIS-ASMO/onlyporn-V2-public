@@ -284,39 +284,43 @@ if (videoUrlMatch && videoUrlMatch[1]) {
   const basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
 
   // 🔥 Known quality ladder
-  const qualities = ['', '_480p', '_720p', '_1080p', '_2160p'];
+  const qualities = ['', '_360p', '_480p', '_720p', '_1080p', '_1440p', '_2160p'];
 
   let streams = [];
 
   for (const q of qualities) {
-    const testUrl = `${basePath}${vid}${q}.mp4`;
+  const testUrl = `${basePath}${vid}${q}.mp4`;
 
-    try {
-      const res = await fetch(testUrl, { method: "HEAD" });
+  try {
+    const res = await fetch(testUrl, { method: "HEAD" });
 
-if (res.ok) {
-  const resolved = await this.resolveStream(testUrl);
-
-      streams.push({
-        url: resolved,
-        name: q ? q.replace('_', '') : 'default',
-        title: q ? q.replace('_', '') : '480p',
-        behaviorHints: {
-          notWebReady: true,
-          headers: {
-            Referer: this.baseUrl,
-            Origin: this.baseUrl,
-            'User-Agent': 'Mozilla/5.0'
-          }
-        }
-      });
-
-      logger.debug(`VALID STREAM: ${testUrl}`);
-
-    } catch (err) {
-      logger.debug(`FAILED: ${testUrl}`);
+    if (!res.ok) {
+      logger.debug(`NOT FOUND: ${testUrl}`);
+      continue;
     }
+
+    const resolved = res.url || testUrl;
+
+    streams.push({
+      url: resolved,
+      name: q ? q.replace('_', '') : '480p',
+      title: q ? q.replace('_', '') : '480p',
+      behaviorHints: {
+        notWebReady: true,
+        headers: {
+          Referer: this.baseUrl,
+          Origin: this.baseUrl,
+          'User-Agent': 'Mozilla/5.0'
+        }
+      }
+    });
+
+    logger.debug(`VALID STREAM: ${testUrl}`);
+
+  } catch (err) {
+    logger.debug(`FAILED: ${testUrl}`);
   }
+}
 
   // Deduplicate
   const seen = new Set();
@@ -354,20 +358,41 @@ if (hlsMatch && hlsMatch[1]) {
 
   logger.debug(`HLS FOUND: ${hlsUrl}`);
 
+  // 🔥 Extract all quality variants from m3u8
+  const hlsStreams = await this.extractHlsStreams(hlsUrl);
+
+  if (hlsStreams.length) {
+    return {
+      metaResponse: new meta.MetaResponse(id, "movie", title, {
+        description: title,
+        background: poster
+      }),
+      streams: hlsStreams
+    };
+  }
+
+  // ⚠️ fallback if parsing fails
   return {
     metaResponse: new meta.MetaResponse(id, "movie", title, {
       description: title,
       background: poster
     }),
-    videoPageUrl: hlsUrl,
-    behaviorHints: {
-      notWebReady: true,
-      headers: {
-        Referer: this.baseUrl,
-        Origin: this.baseUrl,
-        'User-Agent': 'Mozilla/5.0'
+    streams: [
+      {
+        url: hlsUrl,
+        name: "HLS Auto",
+        title: "Adaptive",
+        type: Provider.TYPE,
+        behaviorHints: {
+          notWebReady: true,
+          headers: {
+            Referer: this.baseUrl,
+            Origin: this.baseUrl,
+            'User-Agent': 'Mozilla/5.0'
+          }
+        }
       }
-    }
+    ]
   };
 }
 
