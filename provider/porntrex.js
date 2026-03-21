@@ -3,6 +3,17 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 const fetch = require("node-fetch");
+const getQuality = (url) => {
+  const match = url.match(/(\d{3,4})p/);
+  if (match) return parseInt(match[1]);
+
+  // fallback using bitrate hints
+  if (url.includes('4k') || url.includes('2160')) return 2160;
+  if (url.includes('1080')) return 1080;
+  if (url.includes('720')) return 720;
+
+  return 0;
+};
 
 class PorntrexProvider extends Provider {
 
@@ -218,17 +229,7 @@ if (url.includes('/categories/')) {
 
   async parseVideoPage({ id, html }) {
 
-const getQuality = (url) => {
-  const match = url.match(/(\d{3,4})p/);
-  if (match) return parseInt(match[1]);
 
-  // fallback using bitrate hints
-  if (url.includes('4k') || url.includes('2160')) return 2160;
-  if (url.includes('1080')) return 1080;
-  if (url.includes('720')) return 720;
-
-  return 0;
-};
 
     const videoIdMatch = id.match(/\d+/);
     if (!videoIdMatch) return null;
@@ -319,7 +320,6 @@ if (hlsMatch && hlsMatch[1]) {
     }
   };
 }
-}
 
 
     /* =========================
@@ -361,108 +361,67 @@ streamKeys.forEach(key => {
   }
 });
 
-const resolved = await Promise.all(
-  rawUrls.map(url => this.resolveStream(url))
-);
-
-const valid = resolved.filter(Boolean);
-
-if (valid.length) {
-  const best = valid.sort((a, b) => getQuality(b) - getQuality(a))[0];
-
-  return {
-    metaResponse: new meta.MetaResponse(id, "movie", title, {
-      description: title,
-      background: poster
-    }),
-    videoPageUrl: best,
-    behaviorHints: {
-      notWebReady: true,
-      headers: {
-        Referer: this.baseUrl,
-        Origin: this.baseUrl,
-        'User-Agent': 'Mozilla/5.0'
-      }
-    }
-  };
-}
-
-/* =========================
-   ⚡ RESOLVE STREAMS
-========================= */
 const resolvedUrls = await Promise.all(
   rawUrls.map(url => this.resolveStream(url))
 );
 
-let streams = [];
+const valid = resolvedUrls.filter(Boolean);
 
-for (const resolved of resolvedUrls) {
-
-  logger.debug(`RESOLVED STREAM: ${resolved}`);
-
-  if (!resolved) continue;
-
-  // 🔥 HLS SUPPORT
-  if (resolved.includes('.m3u8')) {
-    logger.debug(`HLS DETECTED: ${resolved}`);
-
-    const hlsStreams = await this.extractHlsStreams(resolved);
-
-    logger.debug(`HLS STREAM COUNT: ${hlsStreams.length}`);
-
-    streams.push(...hlsStreams);
-
-  } else {
-    streams.push({
-      url: resolved,
-      name: 'mp4',
-      type: Provider.TYPE,
-      headers: {
-        Referer: this.baseUrl,
-        Origin: this.baseUrl,
-        'User-Agent': 'Mozilla/5.0',
-      }
-    });
-  }
+if (!valid.length) {
+  logger.error("Porntrex: no valid streams");
+  return null;
 }
 
-    if (!streams.length) {
-      logger.error("Porntrex: no working streams found");
-      return null;
-    }
-
-    // remove duplicates
-    const seen = new Set();
-    streams = streams.filter(s => {
-      if (seen.has(s.url)) return false;
-      seen.add(s.url);
-      return true;
-    });
-
-    // sort best → worst
-    streams.sort((a, b) => getQuality(b.url) - getQuality(a.url));
-
-    return {
-  metaResponse: new meta.MetaResponse(
-    id,
-    "movie",
-    title,
-    {
-      description: title,
-      background: poster
-    }
-  ),
-  videoPageUrl: streams[0]?.url,
-behaviorHints: {
-  notWebReady: true,
-  headers: {
-    Referer: this.baseUrl,
-    Origin: this.baseUrl,
-    'User-Agent': 'Mozilla/5.0'
+// ⚡ parallel extraction
+const streamResults = await Promise.all(valid.map(async (url) => {
+  if (typeof url === 'string' && url.includes('.m3u8')) {
+    return await this.extractHlsStreams(url);
   }
-}
+  return [{ url }];
+}));
+
+let streams = streamResults.flat();
+
+// ✅ dedupe
+const seen = new Set();
+streams = streams.filter(s => {
+  const u = s.url || s;
+  if (seen.has(u)) return false;
+  seen.add(u);
+  return true;
+});
+
+if (!streams.length) return null;
+
+// ✅ smart sorting
+streams.sort((a, b) => {
+  const urlA = a.url || a;
+  const urlB = b.url || b;
+
+  if (urlA.includes('.m3u8')) return -1;
+  if (urlB.includes('.m3u8')) return 1;
+
+  return getQuality(urlB) - getQuality(urlA);
+});
+
+const best = streams[0].url || streams[0];
+
+return {
+  metaResponse: new meta.MetaResponse(id, "movie", title, {
+    description: title,
+    background: poster
+  }),
+  videoPageUrl: best,
+  behaviorHints: {
+    notWebReady: true,
+    headers: {
+      Referer: this.baseUrl,
+      Origin: this.baseUrl,
+      'User-Agent': 'Mozilla/5.0'
+    }
+  }
 };
-  }
+}
 
 }
 
