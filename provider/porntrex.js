@@ -3,21 +3,6 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 const fetch = require("node-fetch");
-const getQuality = (url) => {
-  if (!url) return 0;
-
-  const match = url.match(/(\d{3,4})(p|P)?/);
-  if (match) return parseInt(match[1]);
-
-  if (url.includes('2160') || url.includes('4k')) return 2160;
-  if (url.includes('1440')) return 1440;
-  if (url.includes('1080')) return 1080;
-  if (url.includes('720')) return 720;
-  if (url.includes('480')) return 480;
-  if (url.includes('360')) return 360;
-
-  return 0;
-};
 
 class PorntrexProvider extends Provider {
 
@@ -142,36 +127,26 @@ if (url.includes('/categories/')) {
     return jsonString;
   }
 
-  async resolveStream(url, options = {}) {
+  async resolveStream(url) {
   try {
-    let current = url;
-
-    for (let i = 0; i < 4; i++) {
-      const res = await fetch(current, {
-        method: "GET",
-        redirect: "manual", // 🔥 important
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-          'Referer': this.baseUrl,
-          'Origin': this.baseUrl,
-          ...(options.headers || {}) // ✅ allow custom headers
-        }
-      });
-
-      const location = res.headers.get("location");
-
-      if (!location) {
-        return current;
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "manual",
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': this.baseUrl,
+        'Origin': this.baseUrl
       }
+    });
 
-      current = location.startsWith('http')
-        ? location
-        : new URL(location, current).href;
+    const location = res.headers.get("location");
 
-      logger.debug(`REDIRECT → ${current}`);
+    if (location) {
+      logger.debug(`REDIRECT RESOLVED: ${location}`);
+      return location;
     }
 
-    return current;
+    return url;
 
   } catch (err) {
     logger.error("Resolve failed:", err);
@@ -182,13 +157,7 @@ if (url.includes('/categories/')) {
   // kept (not used here anymore)
   async extractHlsStreams(masterUrl) {
     try {
-      const res = await fetch(masterUrl, {
-  headers: {
-    Referer: this.baseUrl,
-    Origin: this.baseUrl,
-    'User-Agent': 'Mozilla/5.0'
-  }
-});
+      const res = await fetch(masterUrl);
       const text = await res.text();
 
       const lines = text.split('\n');
@@ -234,116 +203,230 @@ if (url.includes('/categories/')) {
   }
 
   async parseVideoPage({ id, html }) {
-  const videoIdMatch = id.match(/\d+/);
-  if (!videoIdMatch) return null;
 
-  const videoId = videoIdMatch[0];
-  const embedUrl = `${this.baseUrl}embed/${videoId}`;
-  const embedHtml = await this.fetchHtml(embedUrl);
+    const videoIdMatch = id.match(/\d+/);
+    if (!videoIdMatch) return null;
 
-  logger.debug(`EMBED HTML LENGTH: ${embedHtml.length}`);
+    const videoId = videoIdMatch[0];
 
-  // Video title & poster
-  const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
-  const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
+    const embedUrl = `${this.baseUrl}embed/${videoId}`;
+    const embedHtml = await this.fetchHtml(embedUrl);
 
-  const title = titleMatch ? titleMatch[1] : "Porntrex Video";
+logger.debug(`EMBED HTML LENGTH: ${embedHtml.length}`);
+logger.debug(`CHECK hls_url: ${embedHtml.includes('hls_url')}`);
+logger.debug(`CHECK alt_url: ${embedHtml.includes('video_alt_url')}`);
 
-  let poster = previewMatch ? previewMatch[1] : null;
-  if (poster && poster.startsWith("//")) poster = "https:" + poster;
+    const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
+    const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
 
-  // 🔥 MP4 direct extraction
-const fileMatches = embedHtml.match(/\/get_file\/[^']+\.mp4[^']*/g) || [];
+    const title = titleMatch ? titleMatch[1] : "Porntrex Video";
 
-// 🔥 fallback alt URLs
-const altMatches = [
-  ...embedHtml.matchAll(/video_alt_url\d*:\s*'([^']+)'/g)
-].map(m => m[1]);
+    let poster = previewMatch ? previewMatch[1] : null;
+    if (poster && poster.startsWith("//")) {
+      poster = "https:" + poster;
+    }
 
-let rawUrls = [...fileMatches, ...altMatches].map(url => {
-  if (url.startsWith("//")) return "https:" + url;
-  if (!url.startsWith("http")) {
-    return this.baseUrl.replace(/\/$/, '') + url;
+/* =========================
+   🎯 PRIMARY: DIRECT MP4
+========================= */
+const videoUrlMatch = embedHtml.match(/video_url:\s*'([^']+)'/);
+
+if (videoUrlMatch && videoUrlMatch[1]) {
+  let videoUrl = videoUrlMatch[1];
+
+  if (videoUrl.startsWith("//")) {
+    videoUrl = "https:" + videoUrl;
   }
-  return url;
+
+  logger.debug(`DIRECT VIDEO FOUND: ${videoUrl}`);
+
+  const finalStream = await this.resolveStream(videoUrl);
+
+return {
+  metaResponse: new meta.MetaResponse(
+    id,
+    "movie",
+    title,
+    {
+      description: title,
+      background: poster
+    }
+  ),
+  videoPageUrl: finalStream,
+behaviorHints: {
+  notWebReady: true,
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+  }
+}
+};
+}
+
+/* =========================
+   🔥 PRIORITY: HLS STREAM
+========================= */
+const hlsMatch = embedHtml.match(/hls_url:\s*'([^']+)'/);
+
+if (hlsMatch && hlsMatch[1]) {
+  let hlsUrl = hlsMatch[1];
+
+  if (hlsUrl.startsWith("//")) {
+    hlsUrl = "https:" + hlsUrl;
+  }
+
+  logger.debug(`HLS MASTER FOUND: ${hlsUrl}`);
+
+  const hlsStreams = await this.extractHlsStreams(hlsUrl);
+
+  if (hlsStreams.length) {
+  logger.debug(`USING HLS STREAMS`);
+
+  const bestStream = hlsStreams.sort((a, b) => {
+    const getQ = s => parseInt(s.name) || 0;
+    return getQ(b) - getQ(a);
+  })[0];
+
+  return {
+    metaResponse: new meta.MetaResponse(
+      id,
+      "movie",
+      title,
+      {
+        description: title,
+        background: poster
+      }
+    ),
+    videoPageUrl: bestStream?.url,
+behaviorHints: {
+  notWebReady: true,
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+   }
+  }
+ };
+}
+}
+
+
+    /* =========================
+       ✅ ONLY ALT URLS (REAL STREAMS)
+    ========================= */
+    const streamKeys = [
+  'video_alt_url',
+  'video_alt_url2',
+  'video_alt_url3',
+  'video_alt_url4',
+  'video_alt_url5',
+];
+
+let rawUrls = [];
+
+streamKeys.forEach(key => {
+  const match = embedHtml.match(new RegExp(`${key}:\\s*'([^']+)'`));
+
+  if (match && match[1]) {
+    let url = match[1];
+
+    if (url.startsWith("//")) {
+      url = "https:" + url;
+    } else if (!url.startsWith("http")) {
+      url = this.baseUrl.replace(/\/$/, '') + url;
+    }
+
+    logger.debug(`RAW STREAM [${key}]: ${url}`);
+    rawUrls.push(url);
+  }
 });
 
-  if (!rawUrls.length) {
-    logger.error("Porntrex: no candidate streams found");
-    return null;
-  }
+if (!rawUrls.length) {
+  logger.error("Porntrex: no raw URLs found");
+  return null;
+}
 
-  // Resolve each URL respecting signed CDN headers
-  const resolvedUrls = await Promise.all(
-    rawUrls.map(url => this.resolveStream(url, {
+/* =========================
+   ⚡ RESOLVE STREAMS
+========================= */
+const resolvedUrls = await Promise.all(
+  rawUrls.map(url => this.resolveStream(url))
+);
+
+let streams = [];
+
+for (const resolved of resolvedUrls) {
+
+  logger.debug(`RESOLVED STREAM: ${resolved}`);
+
+  if (!resolved) continue;
+
+  // 🔥 HLS SUPPORT
+  if (resolved.includes('.m3u8')) {
+    logger.debug(`HLS DETECTED: ${resolved}`);
+
+    const hlsStreams = await this.extractHlsStreams(resolved);
+
+    logger.debug(`HLS STREAM COUNT: ${hlsStreams.length}`);
+
+    streams.push(...hlsStreams);
+
+  } else {
+    streams.push({
+      url: resolved,
+      name: 'mp4',
+      type: Provider.TYPE,
       headers: {
         Referer: this.baseUrl,
         Origin: this.baseUrl,
         'User-Agent': 'Mozilla/5.0',
-        Cookie: 'kt_tcookie=1; confirmed=true'
       }
-    }).catch(() => null))
-  );
-
-  const validUrls = resolvedUrls.filter(Boolean);
-  if (!validUrls.length) return null;
-
-  // Prepare final streams
-  let streams = await Promise.all(validUrls.map(async url => {
-    if (url.includes('.m3u8')) {
-      // HLS variant
-      return await this.extractHlsStreams(url);
-    }
-    // MP4 variant
-    const q = getQuality(url);
-
-return [{
-  url,
-  name: q ? `${q}p` : "MP4",
-  title: q ? `${q}p` : "Unknown",
-  type: Provider.TYPE,
-  behaviorHints: {
-    notWebReady: true,
-    headers: {
-      Referer: this.baseUrl,
-      Origin: this.baseUrl,
-      'User-Agent': 'Mozilla/5.0',
-      Cookie: 'kt_tcookie=1; confirmed=true'
-    }
+    });
   }
-}];
-  }));
+}
 
-  streams = streams.flat();
+    if (!streams.length) {
+      logger.error("Porntrex: no working streams found");
+      return null;
+    }
 
-  // Deduplicate by URL
-  const seen = new Set();
-  streams = streams.filter(s => {
-    const u = s.url;
-    if (seen.has(u)) return false;
-    seen.add(u);
-    return true;
-  });
+    // remove duplicates
+    const seen = new Set();
+    streams = streams.filter(s => {
+      if (seen.has(s.url)) return false;
+      seen.add(s.url);
+      return true;
+    });
 
-  // Sort: HLS first, then MP4 by descending quality
-  streams.sort((a, b) => {
-    const aIsHls = a.url.includes('.m3u8');
-    const bIsHls = b.url.includes('.m3u8');
-    if (aIsHls && !bIsHls) return -1;
-    if (!aIsHls && bIsHls) return 1;
-    return getQuality(b.url) - getQuality(a.url);
-  });
+    // sort best → worst
+    streams.sort((a, b) => {
+  const getQ = s => parseInt(s.name) || 0;
+  return getQ(b) - getQ(a);
+});
 
-  if (!streams.length) return null;
-
-  return {
-    metaResponse: new meta.MetaResponse(id, "movie", title, {
+    return {
+  metaResponse: new meta.MetaResponse(
+    id,
+    "movie",
+    title,
+    {
       description: title,
       background: poster
-    }),
-    streams
-  };
+    }
+  ),
+  videoPageUrl: streams[0]?.url,
+behaviorHints: {
+  notWebReady: true,
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+  }
 }
+};
+  }
+
 }
 
 module.exports = PorntrexProvider.create;
