@@ -129,119 +129,78 @@ if (url.includes('/categories/')) {
 
   async resolveStream(url) {
   try {
-    let currentUrl = url;
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "manual",
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': this.baseUrl,
+        'Origin': this.baseUrl
+      }
+    });
 
-    for (let i = 0; i < 3; i++) {
-      const res = await fetch(currentUrl, {
-        method: "GET",
-        redirect: "manual",
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-          'Referer': this.baseUrl,
-          'Origin': this.baseUrl
-        }
-      });
+    const location = res.headers.get("location");
 
-      const location = res.headers.get("location");
-
-      if (!location) break;
-
-      currentUrl = location.startsWith('http')
-        ? location
-        : new URL(location, currentUrl).href;
-
-      logger.debug(`REDIRECT → ${currentUrl}`);
+    if (location) {
+      logger.debug(`REDIRECT RESOLVED: ${location}`);
+      return location;
     }
 
-    return currentUrl;
+    return url;
 
   } catch (err) {
     logger.error("Resolve failed:", err);
     return url;
   }
 }
+
+  // kept (not used here anymore)
   async extractHlsStreams(masterUrl) {
-  try {
-    const res = await fetch(masterUrl, {
-  headers: {
-    Referer: this.baseUrl,
-    Origin: this.baseUrl,
-    'User-Agent': 'Mozilla/5.0',
-  }
-});
+    try {
+      const res = await fetch(masterUrl);
+      const text = await res.text();
 
-    const text = await res.text();
-    const lines = text.split('\n');
+      const lines = text.split('\n');
+      const streams = [];
 
-    const streams = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+        if (line.startsWith('#EXT-X-STREAM-INF')) {
+          const resolutionMatch = line.match(/RESOLUTION=\d+x(\d+)/);
+          const height = resolutionMatch ? resolutionMatch[1] : 'auto';
 
-      if (line.startsWith('#EXT-X-STREAM-INF')) {
+          const nextLine = lines[i + 1];
 
-        const resMatch = line.match(/RESOLUTION=\d+x(\d+)/);
-        let height = resMatch ? parseInt(resMatch[1]) : 0;
+          if (nextLine && !nextLine.startsWith('#')) {
+            let streamUrl = nextLine.trim();
 
-// 🔥 fallback using bandwidth (for 4K detection)
-const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/);
-if (!height && bandwidthMatch) {
-  const bw = parseInt(bandwidthMatch[1]);
-
-  if (bw > 8000000) height = 2160;
-  else if (bw > 5000000) height = 1080;
-  else if (bw > 2500000) height = 720;
-  else if (bw > 1000000) height = 480;
-}
-
-        let streamUrl = lines[i + 1];
-        if (!streamUrl) continue;
-
-        if (!streamUrl.startsWith('http')) {
-          const base = masterUrl.substring(0, masterUrl.lastIndexOf('/') + 1);
-          streamUrl = base + streamUrl;
-        }
-
-        streams.push({
-          url: streamUrl.trim(),
-          name: height ? `${height}p` : 'auto',
-          type: Provider.TYPE,
-          behaviorHints: {
-            notWebReady: true,
-            headers: {
-              Referer: this.baseUrl,
-              Origin: this.baseUrl,
-              'User-Agent': 'Mozilla/5.0',
+            if (!streamUrl.startsWith('http')) {
+              const base = masterUrl.substring(0, masterUrl.lastIndexOf('/') + 1);
+              streamUrl = base + streamUrl;
             }
-          }
-        });
-      }
-    }
 
-    // 🔥 fallback if no variants (single HLS)
-    if (!streams.length && masterUrl.includes('.m3u8')) {
-      streams.push({
-        url: masterUrl,
-        name: 'auto',
-        type: Provider.TYPE,
-        behaviorHints: {
-          notWebReady: true,
-          headers: {
-            Referer: this.baseUrl,
-            Origin: this.baseUrl,
-            'User-Agent': 'Mozilla/5.0',
+            streams.push({
+              url: streamUrl,
+              name: `${height}p`,
+              type: Provider.TYPE,
+              headers: {
+                Referer: this.baseUrl,
+                Origin: this.baseUrl,
+                'User-Agent': 'Mozilla/5.0',
+              },
+            });
           }
         }
-      });
+      }
+
+      return streams;
+
+    } catch (err) {
+      logger.error("HLS parse failed:", err);
+      return [];
     }
-
-    return streams;
-
-  } catch (err) {
-    logger.error("HLS parse failed:", err);
-    return [];
   }
-}
 
   async parseVideoPage({ id, html }) {
 
@@ -270,40 +229,6 @@ logger.debug(`CHECK alt_url: ${embedHtml.includes('video_alt_url')}`);
     if (poster && poster.startsWith("//")) {
       poster = "https:" + poster;
     }
-/* =========================
-   🔥 PRIORITY: HLS STREAM
-========================= */
-const hlsMatch = embedHtml.match(/hls_url:\s*'([^']+)'/);
-
-if (hlsMatch && hlsMatch[1]) {
-  let hlsUrl = hlsMatch[1];
-
-  if (hlsUrl.startsWith("//")) {
-    hlsUrl = "https:" + hlsUrl;
-  }
-console.log(hlsUrl);
-
-  logger.debug(`HLS MASTER FOUND: ${hlsUrl}`);
-
-  const hlsStreams = await this.extractHlsStreams(hlsUrl);
-
-  if (hlsStreams.length) {
-  logger.debug(`USING HLS STREAMS`);
-
-  return {
-  metaResponse: new meta.MetaResponse(
-    id,
-    "movie",
-    title,
-    {
-      description: title,
-      background: poster
-    }
-  ),
-  streams: hlsStreams
-};
-}
-}
 
 /* =========================
    🎯 PRIMARY: DIRECT MP4
@@ -331,23 +256,64 @@ return {
       background: poster
     }
   ),
-  streams: [{
-    url: finalStream,
-    name: 'auto',
-    type: Provider.TYPE,
-    behaviorHints: {
-      notWebReady: true,
-      headers: {
-        Referer: this.baseUrl,
-        Origin: this.baseUrl,
-        'User-Agent': 'Mozilla/5.0'
-      }
-    }
-  }]
+  videoPageUrl: finalStream,
+behaviorHints: {
+  notWebReady: true,
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+  }
+}
 };
 }
 
+/* =========================
+   🔥 PRIORITY: HLS STREAM
+========================= */
+const hlsMatch = embedHtml.match(/hls_url:\s*'([^']+)'/);
 
+if (hlsMatch && hlsMatch[1]) {
+  let hlsUrl = hlsMatch[1];
+
+  if (hlsUrl.startsWith("//")) {
+    hlsUrl = "https:" + hlsUrl;
+  }
+
+  logger.debug(`HLS MASTER FOUND: ${hlsUrl}`);
+
+  const hlsStreams = await this.extractHlsStreams(hlsUrl);
+
+  if (hlsStreams.length) {
+  logger.debug(`USING HLS STREAMS`);
+
+  const bestStream = hlsStreams.sort((a, b) => {
+    const getQ = s => parseInt(s.name) || 0;
+    return getQ(b) - getQ(a);
+  })[0];
+
+  return {
+    metaResponse: new meta.MetaResponse(
+      id,
+      "movie",
+      title,
+      {
+        description: title,
+        background: poster
+      }
+    ),
+    videoPageUrl: bestStream?.url,
+behaviorHints: {
+  notWebReady: true,
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+   }
+  }
+ };
+}
+}
 
 
     /* =========================
@@ -367,23 +333,17 @@ streamKeys.forEach(key => {
   const match = embedHtml.match(new RegExp(`${key}:\\s*'([^']+)'`));
 
   if (match && match[1]) {
-  let url = match[1];
+    let url = match[1];
 
-  if (url.startsWith("//")) {
-    url = "https:" + url;
-  } else if (!url.startsWith("http")) {
-    url = this.baseUrl.replace(/\/$/, '') + url;
+    if (url.startsWith("//")) {
+      url = "https:" + url;
+    } else if (!url.startsWith("http")) {
+      url = this.baseUrl.replace(/\/$/, '') + url;
+    }
+
+    logger.debug(`RAW STREAM [${key}]: ${url}`);
+    rawUrls.push(url);
   }
-
-  // 🔥 FILTER FAKE ALT URLS HERE
-  if (url.includes('/video/')) {
-    logger.debug(`SKIPPING FAKE ALT URL: ${url}`);
-    return;
-  }
-
-  logger.debug(`RAW STREAM [${key}]: ${url}`);
-  rawUrls.push(url);
-}
 });
 
 if (!rawUrls.length) {
@@ -399,18 +359,12 @@ const resolvedUrls = await Promise.all(
 );
 
 let streams = [];
-const getQuality = (url) => {
-  const match = url.match(/(\d{3,4})p/);
-  return match ? match[1] + 'p' : 'auto';
-};
 
 for (const resolved of resolvedUrls) {
 
   logger.debug(`RESOLVED STREAM: ${resolved}`);
 
   if (!resolved) continue;
-
-
 
   // 🔥 HLS SUPPORT
   if (resolved.includes('.m3u8')) {
@@ -420,13 +374,12 @@ for (const resolved of resolvedUrls) {
 
     logger.debug(`HLS STREAM COUNT: ${hlsStreams.length}`);
 
-
     streams.push(...hlsStreams);
 
   } else {
     streams.push({
-      url: resolved,    
-    name: getQuality(resolved),
+      url: resolved,
+      name: 'mp4',
       type: Provider.TYPE,
       headers: {
         Referer: this.baseUrl,
@@ -466,7 +419,15 @@ for (const resolved of resolvedUrls) {
       background: poster
     }
   ),
-  streams
+  videoPageUrl: streams[0]?.url,
+behaviorHints: {
+  notWebReady: true,
+  headers: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0'
+  }
+}
 };
   }
 
