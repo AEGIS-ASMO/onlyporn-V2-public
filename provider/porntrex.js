@@ -262,6 +262,9 @@ logger.debug(`CHECK alt_url: ${embedHtml.includes('video_alt_url')}`);
 ========================= */
 const videoUrlMatch = embedHtml.match(/video_url:\s*'([^']+)'/);
 
+const qualityMatch = embedHtml.match(/video_url_text:\s*'([^']+)'/);
+const quality = qualityMatch ? qualityMatch[1] : 'MP4';
+
 if (videoUrlMatch && videoUrlMatch[1]) {
   let videoUrl = videoUrlMatch[1];
 
@@ -274,20 +277,26 @@ if (videoUrlMatch && videoUrlMatch[1]) {
   const final = await this.resolveStream(videoUrl);
 
   return {
-    metaResponse: new meta.MetaResponse(id, "movie", title, {
-      description: title,
-      background: poster
-    }),
-    videoPageUrl: final,
-    behaviorHints: {
-      notWebReady: true,
-      headers: {
-        Referer: this.baseUrl,
-        Origin: this.baseUrl,
-        'User-Agent': 'Mozilla/5.0'
+  metaResponse: new meta.MetaResponse(id, "movie", title, {
+    description: title,
+    background: poster
+  }),
+  streams: [
+    {
+      url: final,
+      name: `Porntrex ${quality}`,   // 👈 THIS is what you want
+      title: `${quality}`,
+      behaviorHints: {
+        notWebReady: true,
+        headers: {
+          Referer: this.baseUrl,
+          Origin: this.baseUrl,
+          'User-Agent': 'Mozilla/5.0'
+        }
       }
     }
-  };
+  ]
+};
 }
 
 /* =========================
