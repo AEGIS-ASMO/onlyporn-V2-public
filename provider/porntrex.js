@@ -144,8 +144,8 @@ if (url.includes('/categories/')) {
 
     for (let i = 0; i < 4; i++) {
       const res = await fetch(current, {
-        method: "HEAD",
-        redirect: "manual",
+        method: "GET",
+        redirect: "follow",
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Referer': this.baseUrl,
