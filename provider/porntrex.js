@@ -129,24 +129,31 @@ if (url.includes('/categories/')) {
 
   async resolveStream(url) {
   try {
-    const res = await fetch(url, {
-  method: "HEAD",
-  redirect: "manual",
-  headers: {
-    'User-Agent': 'Mozilla/5.0',
-    'Referer': this.baseUrl,
-    'Origin': this.baseUrl
-  }
-});
+    let currentUrl = url;
 
-    const location = res.headers.get("location");
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch(currentUrl, {
+        method: "GET",
+        redirect: "manual",
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Referer': this.baseUrl,
+          'Origin': this.baseUrl
+        }
+      });
 
-    if (location) {
-      logger.debug(`REDIRECT RESOLVED: ${location}`);
-      return location;
+      const location = res.headers.get("location");
+
+      if (!location) break;
+
+      currentUrl = location.startsWith('http')
+        ? location
+        : new URL(location, currentUrl).href;
+
+      logger.debug(`REDIRECT → ${currentUrl}`);
     }
 
-    return url;
+    return currentUrl;
 
   } catch (err) {
     logger.error("Resolve failed:", err);
