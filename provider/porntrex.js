@@ -346,6 +346,4 @@ return [{
 }
 }
 
-}
-
 module.exports = PorntrexProvider.create;
