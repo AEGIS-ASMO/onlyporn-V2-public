@@ -278,49 +278,46 @@ if (videoUrlMatch && videoUrlMatch[1]) {
     return null;
   }
 
-  const vid = idMatch[1];
+  // 🔥 Extract real get_file URLs directly from embed
+const fileMatches = embedHtml.match(/\/get_file\/[^']+\.mp4[^']*/g) || [];
 
-  // Extract base path (before filename)
-  const basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+let streams = [];
 
-  // 🔥 Known quality ladder
-  const qualities = ['', '_360p', '_480p', '_720p', '_1080p', '_1440p', '_2160p'];
+const results = await Promise.all(
+  fileMatches.map(async (raw) => {
+    let url = raw;
 
-  let streams = [];
-
-  for (const q of qualities) {
-  const testUrl = `${basePath}${vid}${q}.mp4`;
-
-  try {
-    const res = await fetch(testUrl, { method: "HEAD" });
-
-    if (!res.ok) {
-      logger.debug(`NOT FOUND: ${testUrl}`);
-      continue;
+    if (!url.startsWith('http')) {
+      url = this.baseUrl.replace(/\/$/, '') + url;
     }
 
-    const resolved = res.url || testUrl;
+    try {
+      const resolved = await this.resolveStream(url);
 
-    streams.push({
-      url: resolved,
-      name: q ? q.replace('_', '') : '480p',
-      title: q ? q.replace('_', '') : '480p',
-      behaviorHints: {
-        notWebReady: true,
-        headers: {
-          Referer: this.baseUrl,
-          Origin: this.baseUrl,
-          'User-Agent': 'Mozilla/5.0'
+      if (!resolved || !resolved.includes('.mp4')) return null;
+
+      return {
+        url: resolved,
+        name: `Porntrex ${getQuality(resolved)}`,
+        title: `${getQuality(resolved)}p`,
+        behaviorHints: {
+          notWebReady: true,
+          headers: {
+            Referer: this.baseUrl,
+            Origin: this.baseUrl,
+            'User-Agent': 'Mozilla/5.0'
+          }
         }
-      }
-    });
+      };
 
-    logger.debug(`VALID STREAM: ${testUrl}`);
+    } catch (err) {
+      logger.debug(`FAILED: ${url}`);
+      return null;
+    }
+  })
+);
 
-  } catch (err) {
-    logger.debug(`FAILED: ${testUrl}`);
-  }
-}
+streams = results.filter(Boolean);
 
   // Deduplicate
   const seen = new Set();
@@ -490,10 +487,11 @@ return {
   behaviorHints: {
     notWebReady: true,
     headers: {
-      Referer: this.baseUrl,
-      Origin: this.baseUrl,
-      'User-Agent': 'Mozilla/5.0'
-    }
+  'User-Agent': 'Mozilla/5.0',
+  'Referer': this.baseUrl,
+  'Origin': this.baseUrl,
+  'Cookie': 'kt_tcookie=1; confirmed=true;'
+}
   }
 };
 }
