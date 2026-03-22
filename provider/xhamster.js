@@ -50,6 +50,10 @@ class XhamsterProvider extends Provider {
      ✅ OVERRIDE fetchHtml ONLY
   ========================= */
   async fetchHtml(url) {
+if (url.includes('.m3u8')) {
+  logger.warn('Skipping HLS fetch');
+  return '';
+}
   // ✅ prevent duplicate parallel fetches
   if (inFlight.has(url)) {
     return inFlight.get(url);
@@ -341,18 +345,16 @@ logger.warn(`unique videos collected: ${metadataList.length}`);
   }
 
   transformStream(url, stream) {
-    return {
-      ...stream,
-      url: url
-        .replace('_TPL_.av1.mp4.m3u8', '')
-        .replace('_TPL_.h264.mp4.m3u8', '') + stream.url,
-      headers: {
-        Referer: 'https://xhamster.com/',
-        Origin: 'https://xhamster.com',
-        'User-Agent': 'Mozilla/5.0',
-      },
-    };
-  }
+  return {
+    ...stream,
+    url: url, // ✅ DO NOT MODIFY
+    headers: {
+      Referer: 'https://xhamster.com/',
+      Origin: 'https://xhamster.com',
+      'User-Agent': 'Mozilla/5.0',
+    },
+  };
+}
 }
 
 module.exports = XhamsterProvider.create;
