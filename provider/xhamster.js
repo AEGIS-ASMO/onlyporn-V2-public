@@ -63,15 +63,17 @@ class XhamsterProvider extends Provider {
     }
 
     const html = await fetchWithRetry(
-      (u) => super.fetchHtml(u, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          'Accept-Language': 'en-US,en;q=0.9',
-        }
-      }),
-      url
-    );
+  (u) => super.fetchHtml(u, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      'Accept': 'text/html,application/xhtml+xml',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': 'https://xhamster.com/',
+      'Cookie': 'x_content_preference_index=straight; parental-control=yes'
+    }
+  }),
+  url
+);
 
     htmlCache.set(url, { data: html, time: Date.now() });
     return html;
@@ -118,7 +120,7 @@ class XhamsterProvider extends Provider {
 
   handlePagination(url, { extra: { skip } }) {
     const page = this.page(skip);
-    if (!page || page === '1') return url;
+    if (!page || page === '1') return url.replace(/\/1\/?$/, '/');
 
     try {
       const u = new URL(url);
@@ -156,10 +158,12 @@ while (allVideos.length < this.limit && page <= maxPages) {
 
     allVideos.push(...metas);
 
+if (allVideos.length >= this.limit) break;
+
     if (metas.length === 0 && page > 2) break;
 
     page++;
-await delay(1200 + Math.random() * 800);
+await delay(400 + Math.random() * 300);
   }
 
   return allVideos.slice(0, this.limit);
@@ -225,7 +229,7 @@ metadataList.push(
 );
 
 seen.add(v.pageURL);
-if (metadataList.length >= 200) break;
+if (metadataList.length >= this.limit) break;
       
       }
     } catch (e) {
