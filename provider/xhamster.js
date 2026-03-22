@@ -137,34 +137,48 @@ class XhamsterProvider extends Provider {
   /* =========================
      ✅ IMPROVED: full batch fetch + dedupe
   ========================= */
-  async fetchCatalog(baseUrl) {
-  const globalSeen = new Set(); // across pages
-  const fetchedPages = new Set(); // ✅ LOCAL, per request
+  async fetchCatalog(baseUrl, categorySlug) {
+  const globalSeen = new Set();
   const allVideos = [];
   let page = 1;
 
   const maxPages = 10;
 
-while (allVideos.length < this.limit && page <= maxPages) {
-    const pageUrl = this.handlePagination(baseUrl, { extra: { skip: page } });
+  while (allVideos.length < this.limit && page <= maxPages) {
+    let pageUrl;
 
-    if (fetchedPages.has(pageUrl)) break; // ✅ now correct
-    fetchedPages.add(pageUrl);
+    // 1️⃣ API-based fetching for known infinite-scroll categories
+    if (categorySlug) {
+      pageUrl = `https://xhamster.com/api/video-category/${categorySlug}?page=${page}&perPage=30`;
+      try {
+        const res = await fetchWithRetry(u => super.fetchHtml(u, { headers: { 'User-Agent': 'Mozilla/5.0' }}), pageUrl);
+        const json = JSON.parse(res);
+        const metas = json.videos.map(v => new meta.MetaPreview(
+          v.pageURL, 'movie', v.title, v.thumbURL, { videoPageUrl: v.pageURL }
+        ));
+        for (const m of metas) {
+          if (!globalSeen.has(m.id)) {
+            allVideos.push(m);
+            globalSeen.add(m.id);
+          }
+        }
+        if (!metas.length) break;
+      } catch (e) {
+        logger.warn('API fallback failed, switching to HTML');
+        pageUrl = `${this.baseUrl}/categories/${categorySlug}`;
+      }
+    }
 
-    logger.info(`fetching url ${pageUrl}`);
-
-    const html = await this.fetchHtml(pageUrl);
-
-    const metas = this.getCatalogMetas(html, globalSeen);
-
-    allVideos.push(...metas);
-
-if (allVideos.length >= this.limit) break;
-
-    if (metas.length === 0 && page > 2) break;
+    // 2️⃣ Fallback: fetch HTML
+    if (!pageUrl || pageUrl.includes(this.baseUrl)) {
+      const html = await this.fetchHtml(pageUrl);
+      const metas = this.getCatalogMetas(html, globalSeen);
+      allVideos.push(...metas);
+      if (!metas.length && page > 2) break;
+    }
 
     page++;
-await delay(400 + Math.random() * 300);
+    await delay(300 + Math.random() * 200);
   }
 
   return allVideos.slice(0, this.limit);
