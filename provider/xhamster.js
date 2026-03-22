@@ -5,6 +5,9 @@ const Provider = require('./provider');
 
 const metaCache = new Map();
 const META_TTL = 1000 * 60 * 10;
+const htmlCache = new Map();
+const inFlight = new Map();
+const HTML_TTL = 1000 * 60 * 5; // 5 min
 
 /* =========================
    ✅ ADDED: delay + retry
@@ -37,7 +40,6 @@ class XhamsterProvider extends Provider {
 
   constructor() {
     super('https://xhamster.com', 'xhamster', 45);
-    this.fetchedPages = new Set(); // ✅ track fetched page URLs globally
   }
 
   static create() {
@@ -48,17 +50,41 @@ class XhamsterProvider extends Provider {
      ✅ OVERRIDE fetchHtml ONLY
   ========================= */
   async fetchHtml(url) {
-    return fetchWithRetry(
+  // ✅ prevent duplicate parallel fetches
+  if (inFlight.has(url)) {
+    return inFlight.get(url);
+  }
+
+  const promise = (async () => {
+    const cached = htmlCache.get(url);
+
+    if (cached && Date.now() - cached.time < HTML_TTL) {
+      return cached.data;
+    }
+
+    const html = await fetchWithRetry(
       (u) => super.fetchHtml(u, {
         headers: {
           'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
           'Accept-Language': 'en-US,en;q=0.9',
         }
       }),
       url
     );
+
+    htmlCache.set(url, { data: html, time: Date.now() });
+    return html;
+  })();
+
+  inFlight.set(url, promise);
+
+  try {
+    return await promise;
+  } finally {
+    inFlight.delete(url);
   }
+}
 
   getInitialUrl(catalogId) {
     let url = this.baseUrl;
@@ -109,26 +135,31 @@ class XhamsterProvider extends Provider {
      ✅ IMPROVED: full batch fetch + dedupe
   ========================= */
   async fetchCatalog(baseUrl) {
-    const seen = new Set();
-    const allVideos = [];
-    let page = 1;
+  const seen = new Set();
+  const fetchedPages = new Set(); // ✅ LOCAL, per request
+  const allVideos = [];
+  let page = 1;
 
-    while (allVideos.length < this.limit) {
-      const pageUrl = this.handlePagination(baseUrl, { extra: { skip: page } });
-      if (this.fetchedPages.has(pageUrl)) break; // stop if already fetched
-      this.fetchedPages.add(pageUrl);
+  while (allVideos.length < this.limit) {
+    const pageUrl = this.handlePagination(baseUrl, { extra: { skip: page } });
 
-      logger.info(`fetching url ${pageUrl}`);
-      const html = await this.fetchHtml(pageUrl);
-      const metas = this.getCatalogMetas(html, seen);
-      allVideos.push(...metas);
+    if (fetchedPages.has(pageUrl)) break; // ✅ now correct
+    fetchedPages.add(pageUrl);
 
-      if (metas.length === 0) break; // no more videos
-      page++;
-    }
+    logger.info(`fetching url ${pageUrl}`);
 
-    return allVideos.slice(0, this.limit);
+    const html = await this.fetchHtml(pageUrl);
+    const metas = this.getCatalogMetas(html, seen);
+
+    allVideos.push(...metas);
+
+    if (metas.length === 0) break;
+
+    page++;
   }
+
+  return allVideos.slice(0, this.limit);
+}
 
   /* =========================
      ✅ MODIFIED: accept external seen
