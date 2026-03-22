@@ -175,7 +175,26 @@ class XhamsterProvider extends Provider {
   if (match) {
     try {
       const json = JSON.parse(match[1]);
-      const videos = json?.layoutPage?.videoListProps?.videoThumbProps || [];
+      const videos = [];
+
+// main list
+if (json?.layoutPage?.videoListProps?.videoThumbProps) {
+  videos.push(...json.layoutPage.videoListProps.videoThumbProps);
+}
+
+// 🔥 additional rails (THIS is what you're missing)
+const rails = json?.layoutPage?.sections || json?.layoutPage?.content || [];
+
+for (const section of rails) {
+  const items =
+    section?.videoListProps?.videoThumbProps ||
+    section?.videoThumbProps ||
+    section?.videos;
+
+  if (Array.isArray(items)) {
+    videos.push(...items);
+  }
+}
       logger.warn(`videos in JSON: ${videos.length}`);
 
       for (const v of videos) {
@@ -195,8 +214,6 @@ class XhamsterProvider extends Provider {
 
         if (metadataList.length >= this.limit) break;
       }
-
-      if (metadataList.length >= this.limit / 2) return metadataList;
     } catch (e) {
       logger.error('JSON parse failed', e);
     }
