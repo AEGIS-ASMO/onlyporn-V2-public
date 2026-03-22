@@ -151,14 +151,15 @@ while (allVideos.length < this.limit && page <= maxPages) {
     logger.info(`fetching url ${pageUrl}`);
 
     const html = await this.fetchHtml(pageUrl);
-await delay(1200 + Math.random() * 800);
+
     const metas = this.getCatalogMetas(html, seen);
 
     allVideos.push(...metas);
 
-    if (metas.length === 0) break;
+    if (metas.length === 0 && page > 2) break;
 
     page++;
+await delay(1200 + Math.random() * 800);
   }
 
   return allVideos.slice(0, this.limit);
@@ -174,7 +175,7 @@ await delay(1200 + Math.random() * 800);
   const metadataList = [];
 
   // JSON parsing
-  const match = html.match(/window\.initials\s*=\s*(\{[\s\S]*?\});/);
+  const match = html.match(/window\.initials\s*=\s*(\{[\s\S]*\});/);
   if (match) {
     try {
       const json = JSON.parse(match[1]);
@@ -186,10 +187,12 @@ if (json?.layoutPage?.videoListProps?.videoThumbProps) {
 }
 
 // 🔥 additional rails (THIS is what you're missing)
-let rails = json?.layoutPage?.sections || json?.layoutPage?.content || [];
+let rails = [];
 
-if (!Array.isArray(rails)) {
-  rails = Object.values(rails);
+if (Array.isArray(json?.layoutPage?.sections)) {
+  rails = json.layoutPage.sections;
+} else if (json?.layoutPage?.content) {
+  rails = Object.values(json.layoutPage.content);
 }
 
 for (const section of rails) {
@@ -220,7 +223,7 @@ for (const section of rails) {
             { videoPageUrl: v.pageURL }
           )
         );
-if (metas.length < 5) break;
+if (metadataList.length >= 100) break;
       
       }
     } catch (e) {
