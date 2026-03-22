@@ -10,6 +10,12 @@ class PorntrexProvider extends Provider {
     super('https://porntrex.com/', 'porntrex');
     this.dataset = {};
     this.metas = {};
+    this.videoCache = new Map(); // 🧠 cache parsed video pages
+this.videoCacheTTL = 1000 * 60 * 5; // 5 min
+    this.streamCache = new Map(); // 🎥 cache resolved streams
+this.streamCacheTTL = 1000 * 60 * 10; // 10 min
+this.streamPending = new Map();
+this.videoPending = new Map();
   }
 
   static create() {
@@ -39,8 +45,8 @@ class PorntrexProvider extends Provider {
   }
 
   handlePagination(url, { extra: { skip } }) {
-    const page = this.page(skip);
-    const from = (page - 1) * 24;
+    const page = parseInt(this.page(skip)) || 1;
+const from = (page - 1) * 24;
 
     if (url.includes('/search/')) {
       const keywordMatch = url.match(/search\/([^\/]+)/);
@@ -103,78 +109,134 @@ class PorntrexProvider extends Provider {
   }
 
   async resolveStream(url) {
-    try {
-      const res = await fetch(url, {
-        method: "HEAD",
-        redirect: "manual",
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-          'Referer': this.baseUrl,
-          'Origin': this.baseUrl
-        }
-      });
 
-      const location = res.headers.get("location");
-      if (location) {
-        logger.debug(`REDIRECT RESOLVED: ${location}`);
-        return location;
-      }
-
-      return url;
-    } catch (err) {
-      logger.warn("Porntrex: failed to resolve stream, using original URL", err);
-      return url;
-    }
+  // ✅ CACHE HIT
+  const cached = this.streamCache.get(url);
+  if (cached && (Date.now() - cached.time < this.streamCacheTTL)) {
+    logger.debug(`Porntrex: stream cache hit for ${url}`);
+    return cached.data;
   }
+
+  // 🔁 PREVENT DUPLICATE HEAD REQUESTS
+if (this.streamPending.has(url)) {
+  return this.streamPending.get(url);
+}
+
+const request = (async () => {
+  try {
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "manual",
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': this.baseUrl,
+        'Origin': this.baseUrl
+      }
+    });
+
+    const location = res.headers.get("location");
+    const finalUrl = location || url;
+
+    this.streamCache.set(url, {
+      data: finalUrl,
+      time: Date.now()
+    });
+
+    return finalUrl;
+
+  } catch (err) {
+    logger.warn("Porntrex: failed to resolve stream", err);
+    return url;
+  } finally {
+    this.streamPending.delete(url);
+  }
+})();
+
+this.streamPending.set(url, request);
+
+return request;
+}
 
   async parseVideoPage({ id }) {
-    const videoIdMatch = id.match(/\d+/);
-    if (!videoIdMatch) {
-      logger.warn(`Porntrex: invalid video id "${id}"`);
-      return null;
-    }
 
-    const videoId = videoIdMatch[0];
-    const embedUrl = `${this.baseUrl}embed/${videoId}`;
-    const embedHtml = await this.fetchHtml(embedUrl);
-
-    logger.debug(`EMBED HTML LENGTH: ${embedHtml.length}`);
-
-    const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
-    const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
-    const videoMatch = embedHtml.match(/video_url:\s*'([^']+)'/);
-
-    if (!videoMatch) {
-      logger.warn(`Porntrex: video_url not found for ${videoId}`);
-      return null;
-    }
-
-    let videoUrl = videoMatch[1];
-    if (videoUrl.startsWith("//")) videoUrl = "https:" + videoUrl;
-
-    let poster = previewMatch ? previewMatch[1] : null;
-    if (poster && poster.startsWith("//")) poster = "https:" + poster;
-
-    const finalStream = await this.resolveStream(videoUrl);
-
-    return {
-      metaResponse: new meta.MetaResponse(
-        id,
-        "movie",
-        titleMatch ? titleMatch[1] : "Porntrex Video",
-        { description: titleMatch ? titleMatch[1] : "Porntrex Video", background: poster }
-      ),
-      videoPageUrl: finalStream,
-      behaviorHints: {
-        notWebReady: true,
-        headers: {
-          Referer: this.baseUrl,
-          Origin: this.baseUrl,
-          'User-Agent': 'Mozilla/5.0'
-        }
-      }
-    };
+  // ✅ CACHE HIT
+  const cached = this.videoCache.get(id);
+  if (cached && (Date.now() - cached.time < this.videoCacheTTL)) {
+    logger.debug(`Porntrex: video cache hit for ${id}`);
+    return cached.data;
   }
+// 🔁 PREVENT DUPLICATE PARSE
+if (this.videoPending.has(id)) {
+  return this.videoPending.get(id);
+}
+
+const request = (async () => {
+
+  const videoIdMatch = id.match(/\d+/);
+  if (!videoIdMatch) {
+    logger.warn(`Porntrex: invalid video id "${id}"`);
+    return null;
+  }
+
+  const videoId = videoIdMatch[0];
+  const embedUrl = `${this.baseUrl}embed/${videoId}`;
+
+  const embedHtml = await this.fetchHtml(embedUrl);
+
+  const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
+  const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
+  const videoMatch = embedHtml.match(/video_url:\s*'([^']+)'/);
+
+  if (!videoMatch) {
+    logger.warn(`Porntrex: video_url not found for ${videoId}`);
+    return null;
+  }
+
+  let videoUrl = videoMatch[1];
+  if (videoUrl.startsWith("//")) videoUrl = "https:" + videoUrl;
+
+  let poster = previewMatch ? previewMatch[1] : null;
+  if (poster && poster.startsWith("//")) poster = "https:" + poster;
+
+  const finalStream = await this.resolveStream(videoUrl);
+
+  const result = {
+    metaResponse: new meta.MetaResponse(
+      id,
+      "movie",
+      titleMatch ? titleMatch[1] : "Porntrex Video",
+      { description: titleMatch ? titleMatch[1] : "Porntrex Video", background: poster }
+    ),
+    videoPageUrl: finalStream,
+    behaviorHints: {
+      notWebReady: true,
+      headers: {
+        Referer: this.baseUrl,
+        Origin: this.baseUrl,
+        'User-Agent': 'Mozilla/5.0'
+      }
+    }
+  };
+
+  // ✅ SAVE CACHE
+  this.videoCache.set(id, {
+    data: result,
+    time: Date.now()
+  });
+
+  return result;
+
+})();
+
+this.videoPending.set(id, request);
+
+try {
+  const result = await request;
+  return result;
+} finally {
+  this.videoPending.delete(id);
+}
+}
 }
 
 module.exports = PorntrexProvider.create;
