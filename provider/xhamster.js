@@ -37,17 +37,22 @@ class XhamsterProvider extends Provider {
 
   constructor() {
     super('https://xhamster.com', 'xhamster', 45);
+    this.fetchedPages = new Set(); // ✅ track fetched page URLs globally
   }
 
   static create() {
     return new XhamsterProvider();
   }
 
+  /* =========================
+     ✅ OVERRIDE fetchHtml ONLY
+  ========================= */
   async fetchHtml(url) {
     return fetchWithRetry(
       (u) => super.fetchHtml(u, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
           'Accept-Language': 'en-US,en;q=0.9',
         }
       }),
@@ -72,6 +77,7 @@ class XhamsterProvider extends Provider {
       path += pathMappings[genre];
       return this.baseUrl + path;
     }
+
     if (genre) {
       const slug = genre
         .toLowerCase()
@@ -80,12 +86,14 @@ class XhamsterProvider extends Provider {
         .replace(/[^a-z0-9-]/g, '');
       return `${this.baseUrl}/categories/${slug}`;
     }
+
     return this.getInitialUrl(id);
   }
 
   handlePagination(url, { extra: { skip } }) {
     const page = this.page(skip);
     if (!page || page === '1') return url;
+
     try {
       const u = new URL(url);
       let pathname = u.pathname.replace(/\/$/, '');
@@ -98,32 +106,46 @@ class XhamsterProvider extends Provider {
   }
 
   /* =========================
-     ✅ NEW: fetchCatalogPage helper
+     ✅ IMPROVED: full batch fetch + dedupe
   ========================= */
-  async fetchCatalogPage(url, seen, fetchedPages) {
-    if (fetchedPages.has(url)) return [];
-    fetchedPages.add(url);
+  async fetchCatalog(baseUrl) {
+    const seen = new Set();
+    const allVideos = [];
+    let page = 1;
 
-    logger.info(`fetching url ${url}`);
-    const html = await this.fetchHtml(url);
-    return this.getCatalogMetas(html, seen);
+    while (allVideos.length < this.limit) {
+      const pageUrl = this.handlePagination(baseUrl, { extra: { skip: page } });
+      if (this.fetchedPages.has(pageUrl)) break; // stop if already fetched
+      this.fetchedPages.add(pageUrl);
+
+      logger.info(`fetching url ${pageUrl}`);
+      const html = await this.fetchHtml(pageUrl);
+      const metas = this.getCatalogMetas(html, seen);
+      allVideos.push(...metas);
+
+      if (metas.length === 0) break; // no more videos
+      page++;
+    }
+
+    return allVideos.slice(0, this.limit);
   }
 
   /* =========================
-     ✅ MODIFIED: getCatalogMetas
+     ✅ MODIFIED: accept external seen
   ========================= */
   getCatalogMetas(html, seen) {
     if (!html || html.length < 1000) return [];
+    logger.warn(`HTML length: ${html.length}`);
 
     const metadataList = [];
-    seen ||= new Set();
 
+    // Try JSON first
     const match = html.match(/window\.initials\s*=\s*(\{.*?\});/s);
-
     if (match) {
       try {
         const json = JSON.parse(match[1]);
         const videos = json?.layoutPage?.videoListProps?.videoThumbProps || [];
+        logger.warn(`videos in JSON: ${videos.length}`);
 
         for (const v of videos) {
           if (!v?.pageURL || !v?.title || !v?.thumbURL) continue;
@@ -144,12 +166,13 @@ class XhamsterProvider extends Provider {
         }
 
         if (metadataList.length >= this.limit / 2) return metadataList;
+
       } catch (e) {
         logger.error('JSON parse failed', e);
       }
     }
 
-    // DOM fallback
+    // DOM fallback if JSON is insufficient
     const $ = load(html);
     $('.thumb-list__item, .video-thumb, .thumb-list__item--video, .thumb-list__item--premium')
       .each((_, element) => {
@@ -165,11 +188,7 @@ class XhamsterProvider extends Provider {
         seen.add(videoPageUrl);
 
         const $img = $a.find('img').first();
-        let poster =
-          $img.attr('data-src') ||
-          $img.attr('data-original') ||
-          $img.attr('data-preview') ||
-          $img.attr('src');
+        let poster = $img.attr('data-src') || $img.attr('data-original') || $img.attr('data-preview') || $img.attr('src');
         if (poster && !poster.startsWith('http')) poster = this.baseUrl + poster;
 
         const title = $img.attr('alt') || $a.attr('title');
@@ -189,28 +208,9 @@ class XhamsterProvider extends Provider {
     return metadataList;
   }
 
-  /* =========================
-     ✅ NEW: fetch full catalog with all pages
-  ========================= */
-  async fetchFullCatalog(baseUrl) {
-    const seen = new Set();
-    const fetchedPages = new Set();
-    let allVideos = [];
-    let page = 1;
-
-    while (allVideos.length < this.limit) {
-      const pageUrl = this.handlePagination(baseUrl, { extra: { skip: page } });
-      const metas = await this.fetchCatalogPage(pageUrl, seen, fetchedPages);
-      if (metas.length === 0) break;
-
-      allVideos = allVideos.concat(metas);
-      page++;
-    }
-
-    return allVideos.slice(0, this.limit);
-  }
-
   async getMetadata(args) {
+    logger.debug({ args }, 'getMetadata');
+
     let { id } = args;
     if (!id.startsWith('http')) id = this.baseUrl + id;
 
@@ -225,14 +225,17 @@ class XhamsterProvider extends Provider {
   }
 
   parseVideoPage({ id, html }) {
-    let match = html.match(/window\.initials\s*=\s*(\{.*?\});/) ||
-                html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/);
+    let match = html.match(/window\.initials\s*=\s*(\{.*?\});/) || html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/);
     if (!match) return {};
 
     let json;
     try {
-      if (match[1].startsWith('{')) json = JSON.parse(match[1]);
-      else json = JSON.parse(match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+      if (match[1].startsWith('{')) {
+        json = JSON.parse(match[1]);
+      } else {
+        const decoded = match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        json = JSON.parse(decoded);
+      }
     } catch (err) {
       logger.error(err);
       return {};
@@ -244,27 +247,38 @@ class XhamsterProvider extends Provider {
 
     let streamUrl = null;
     const sources = json?.xplayerSettings?.sources || {};
+
     if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;
     else if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;
     else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;
     else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;
+
     if (streamUrl && !streamUrl.startsWith('http')) streamUrl = null;
 
     const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
+
     if (!streamUrl) logger.warn("xHamster: no stream URL found");
 
     return new meta.MetaResponse(
       id,
       Provider.TYPE,
       title,
-      { videoPageUrl: streamUrl, description, poster, background: poster, genres: tags }
+      {
+        videoPageUrl: streamUrl,
+        description,
+        poster,
+        background: poster,
+        genres: tags,
+      },
     );
   }
 
   transformStream(url, stream) {
     return {
       ...stream,
-      url: url.replace('_TPL_.av1.mp4.m3u8', '').replace('_TPL_.h264.mp4.m3u8', '') + stream.url,
+      url: url
+        .replace('_TPL_.av1.mp4.m3u8', '')
+        .replace('_TPL_.h264.mp4.m3u8', '') + stream.url,
       headers: {
         Referer: 'https://xhamster.com/',
         Origin: 'https://xhamster.com',
