@@ -355,32 +355,24 @@ logger.warn(`unique videos collected: ${metadataList.length}`);
     let streamUrl = null;
 const sources = json?.xplayerSettings?.sources || {};
 
-// Collect all HLS and MP4 URLs
-const allUrls = [];
-
-if (sources.hls) {
-  for (const codec of Object.values(sources.hls)) {
-    if (codec?.url) allUrls.push(codec.url);
-  }
-}
-if (sources.mp4) {
-  for (const quality of Object.values(sources.mp4)) {
-    if (quality?.url) allUrls.push(quality.url);
-  }
+// Prefer HLS first
+if (sources?.hls?.av1?.url) {
+  streamUrl = sources.hls.av1.url;
+} else if (sources?.hls?.h264?.url) {
+  streamUrl = sources.hls.h264.url;
+} else if (sources?.mp4?.high?.url) {
+  streamUrl = sources.mp4.high.url;
+} else if (sources?.mp4?.medium?.url) {
+  streamUrl = sources.mp4.medium.url;
 }
 
-// Pick the first valid URL and clean it
-if (allUrls.length) {
-  streamUrl = allUrls.find(u => u.startsWith('http'));
-  if (streamUrl) {
-    // Remove any xHamster-specific suffixes like ".7700b"
-    streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');
-  }
-}
+// Clean xHamster-specific suffixes if present
+if (streamUrl && !streamUrl.startsWith('http')) streamUrl = null;
+if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');
 
-    const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
+const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
 
-    if (!streamUrl) logger.warn("xHamster: no stream URL found");
+if (!streamUrl) logger.warn("xHamster: no stream URL found");
 
     return new meta.MetaResponse(
       id,
