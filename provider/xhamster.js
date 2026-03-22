@@ -163,54 +163,52 @@ class XhamsterProvider extends Provider {
   const $ = load(html);
   let count = 0;
 
-  $('.thumb-list__item').each((_, element) => {
-    if (count >= this.limit) return false;
+  $('.video-thumb, .thumb-list__item, .thumb-list__item--video').each((_, element) => {
+  if (count >= this.limit) return false;
 
-    const $e = $(element);
-    const $a = $e.find('a').first();
+  const $e = $(element);
+  const $a = $e.find('a').first();
 
-    let videoPageUrl = $a.attr('href');
+  let videoPageUrl = $a.attr('href');
 
-    if (videoPageUrl && videoPageUrl.includes('/ff/out')) return;
+  if (!videoPageUrl) return;
+  if (videoPageUrl.includes('/ff/out')) return;
+  if (videoPageUrl.includes('/moments/')) return;
 
-if (videoPageUrl && videoPageUrl.includes('/moments/')) return;
+  if (!videoPageUrl.startsWith('http')) {
+    videoPageUrl = this.baseUrl + videoPageUrl;
+  }
 
-    const $img = $a.find('img').first();
+  const $img = $a.find('img').first();
 
-    let poster =
-      $img.attr('data-src') ||
-      $img.attr('data-original') ||
-      $img.attr('data-preview') ||
-      $img.attr('src');
+  let poster =
+    $img.attr('data-src') ||
+    $img.attr('data-original') ||
+    $img.attr('data-preview') ||
+    $img.attr('src');
 
-    if (!poster || poster.startsWith('data:')) return;
+  if (poster && !poster.startsWith('http')) {
+    poster = this.baseUrl + poster;
+  }
 
-    if (!poster.startsWith('http')) {
-      poster = this.baseUrl + poster;
-    }
+  const title =
+    $img.attr('alt') ||
+    $a.attr('title');
 
-    if (videoPageUrl && !videoPageUrl.startsWith('http')) {
-      videoPageUrl = this.baseUrl + videoPageUrl;
-    }
+  if (!title) return;
 
-    const title =
-      $img.attr('alt') ||
-      $a.attr('title');
+  metadataList.push(
+    new meta.MetaPreview(
+      videoPageUrl,
+      'movie',
+      title,
+      poster,
+      { videoPageUrl }
+    )
+  );
 
-    if (!videoPageUrl || !title) return;
-
-    metadataList.push(
-      new meta.MetaPreview(
-        videoPageUrl,
-        'movie',
-        title,
-        poster,
-        { videoPageUrl },
-      ),
-    );
-
-    count++;
-  });
+  count++;
+});
 
   return metadataList;
 }
