@@ -39,7 +39,7 @@ const pathMappings = {
 class XhamsterProvider extends Provider {
 
   constructor() {
-    super('https://xhamster.com', 'xhamster', 45);
+    super('https://xhamster.com', 'xhamster', 60);
   }
 
   static create() {
@@ -198,7 +198,7 @@ for (const section of rails) {
       logger.warn(`videos in JSON: ${videos.length}`);
 
       for (const v of videos) {
-        if (!v?.pageURL || !v?.title || !v?.thumbURL) continue;
+        if (!v?.pageURL || !v?.title) continue;
         if (seen.has(v.pageURL)) continue;
         seen.add(v.pageURL);
 
@@ -207,7 +207,7 @@ for (const section of rails) {
             v.pageURL,
             'movie',
             v.title,
-            v.imageURL || v.thumbURL,
+            v.imageURL || v.thumbURL || v.poster || v.previewImageURL
             { videoPageUrl: v.pageURL }
           )
         );
