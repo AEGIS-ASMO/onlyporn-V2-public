@@ -140,7 +140,7 @@ class XhamsterProvider extends Provider {
   const allVideos = [];
   let page = 1;
 
-  const maxPages = 5;
+  const maxPages = 10;
 
 while (allVideos.length < this.limit && page <= maxPages) {
     const pageUrl = this.handlePagination(baseUrl, { extra: { skip: page } });
@@ -151,6 +151,7 @@ while (allVideos.length < this.limit && page <= maxPages) {
     logger.info(`fetching url ${pageUrl}`);
 
     const html = await this.fetchHtml(pageUrl);
+await delay(1200 + Math.random() * 800);
     const metas = this.getCatalogMetas(html, seen);
 
     allVideos.push(...metas);
@@ -173,7 +174,7 @@ while (allVideos.length < this.limit && page <= maxPages) {
   const metadataList = [];
 
   // JSON parsing
-  const match = html.match(/window\.initials\s*=\s*(\{.*?\});/s);
+  const match = html.match(/window\.initials\s*=\s*(\{[\s\S]*?\});/);
   if (match) {
     try {
       const json = JSON.parse(match[1]);
@@ -219,9 +220,8 @@ for (const section of rails) {
             { videoPageUrl: v.pageURL }
           )
         );
-
-        if (metas.length < 5) break;
-await delay(800);
+if (metas.length < 5) break;
+      
       }
     } catch (e) {
       logger.error('JSON parse failed', e);
