@@ -175,7 +175,7 @@ await delay(1200 + Math.random() * 800);
   const metadataList = [];
 
   // JSON parsing
-  const match = html.match(/window\.initials\s*=\s*(\{[\s\S]*\});/);
+  const match = html.match(/window\.initials\s*=\s*(\{.*?\});/s);
   if (match) {
     try {
       const json = JSON.parse(match[1]);
