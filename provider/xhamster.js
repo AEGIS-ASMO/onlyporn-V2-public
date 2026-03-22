@@ -133,80 +133,79 @@ class XhamsterProvider extends Provider {
   /* =========================
      ✅ MODIFIED: accept external seen
   ========================= */
-  getCatalogMetas(html, seen) {
-    if (!html || html.length < 1000) return [];
-    logger.warn(`HTML length: ${html.length}`);
+  getCatalogMetas(html, seen = new Set()) {
+  if (!html || html.length < 1000) return [];
+  logger.warn(`HTML length: ${html.length}`);
 
-    const metadataList = [];
+  const metadataList = [];
 
-    // Try JSON first
-    const match = html.match(/window\.initials\s*=\s*(\{.*?\});/s);
-    if (match) {
-      try {
-        const json = JSON.parse(match[1]);
-        const videos = json?.layoutPage?.videoListProps?.videoThumbProps || [];
-        logger.warn(`videos in JSON: ${videos.length}`);
+  // JSON parsing
+  const match = html.match(/window\.initials\s*=\s*(\{.*?\});/s);
+  if (match) {
+    try {
+      const json = JSON.parse(match[1]);
+      const videos = json?.layoutPage?.videoListProps?.videoThumbProps || [];
+      logger.warn(`videos in JSON: ${videos.length}`);
 
-        for (const v of videos) {
-          if (!v?.pageURL || !v?.title || !v?.thumbURL) continue;
-          if (seen.has(v.pageURL)) continue;
-          seen.add(v.pageURL);
-
-          metadataList.push(
-            new meta.MetaPreview(
-              v.pageURL,
-              'movie',
-              v.title,
-              v.imageURL || v.thumbURL,
-              { videoPageUrl: v.pageURL }
-            )
-          );
-
-          if (metadataList.length >= this.limit) break;
-        }
-
-        if (metadataList.length >= this.limit / 2) return metadataList;
-
-      } catch (e) {
-        logger.error('JSON parse failed', e);
-      }
-    }
-
-    // DOM fallback if JSON is insufficient
-    const $ = load(html);
-    $('.thumb-list__item, .video-thumb, .thumb-list__item--video, .thumb-list__item--premium')
-      .each((_, element) => {
-        if (metadataList.length >= this.limit) return false;
-
-        const $e = $(element);
-        const $a = $e.find('a').first();
-        let videoPageUrl = $a.attr('href');
-        if (!videoPageUrl) return;
-        if (videoPageUrl.includes('/ff/out') || videoPageUrl.includes('/moments/')) return;
-        if (!videoPageUrl.startsWith('http')) videoPageUrl = this.baseUrl + videoPageUrl;
-        if (seen.has(videoPageUrl)) return;
-        seen.add(videoPageUrl);
-
-        const $img = $a.find('img').first();
-        let poster = $img.attr('data-src') || $img.attr('data-original') || $img.attr('data-preview') || $img.attr('src');
-        if (poster && !poster.startsWith('http')) poster = this.baseUrl + poster;
-
-        const title = $img.attr('alt') || $a.attr('title');
-        if (!title) return;
+      for (const v of videos) {
+        if (!v?.pageURL || !v?.title || !v?.thumbURL) continue;
+        if (seen.has(v.pageURL)) continue;
+        seen.add(v.pageURL);
 
         metadataList.push(
           new meta.MetaPreview(
-            videoPageUrl,
+            v.pageURL,
             'movie',
-            title,
-            poster,
-            { videoPageUrl }
+            v.title,
+            v.imageURL || v.thumbURL,
+            { videoPageUrl: v.pageURL }
           )
         );
-      });
 
-    return metadataList;
+        if (metadataList.length >= this.limit) break;
+      }
+
+      if (metadataList.length >= this.limit / 2) return metadataList;
+    } catch (e) {
+      logger.error('JSON parse failed', e);
+    }
   }
+
+  // DOM fallback
+  const $ = load(html);
+  $('.thumb-list__item, .video-thumb, .thumb-list__item--video, .thumb-list__item--premium')
+    .each((_, element) => {
+      if (metadataList.length >= this.limit) return false;
+
+      const $e = $(element);
+      const $a = $e.find('a').first();
+      let videoPageUrl = $a.attr('href');
+      if (!videoPageUrl) return;
+      if (videoPageUrl.includes('/ff/out') || videoPageUrl.includes('/moments/')) return;
+      if (!videoPageUrl.startsWith('http')) videoPageUrl = this.baseUrl + videoPageUrl;
+      if (seen.has(videoPageUrl)) return;
+      seen.add(videoPageUrl);
+
+      const $img = $a.find('img').first();
+      let poster = $img.attr('data-src') || $img.attr('data-original') || $img.attr('data-preview') || $img.attr('src');
+      if (poster && !poster.startsWith('http')) poster = this.baseUrl + poster;
+
+      const title = $img.attr('alt') || $a.attr('title');
+      if (!title) return;
+
+      metadataList.push(
+        new meta.MetaPreview(
+          videoPageUrl,
+          'movie',
+          title,
+          poster,
+          { videoPageUrl }
+        )
+      );
+    });
+
+  return metadataList;
+}
 
   async getMetadata(args) {
     logger.debug({ args }, 'getMetadata');
