@@ -3,6 +3,9 @@ const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
 
+const metaCache = new Map();
+const META_TTL = 1000 * 60 * 10;
+
 /* =========================
    ✅ ADDED: delay + retry
 ========================= */
@@ -223,8 +226,17 @@ class XhamsterProvider extends Provider {
     id = this.baseUrl + id;
   }
 
-  return this.fetchHtml(id)
-    .then(html => this.parseVideoPage({ id, html }));
+  const cached = metaCache.get(id);
+  if (cached && Date.now() - cached.time < META_TTL) {
+    return cached.data;
+  }
+
+  const html = await this.fetchHtml(id);
+  const data = this.parseVideoPage({ id, html });
+
+  metaCache.set(id, { data, time: Date.now() });
+
+  return data;
 }
 
   parseVideoPage({ id, html }) {
@@ -315,11 +327,7 @@ if (streamUrl && !streamUrl.startsWith('http')) {
 
     return {
       ...stream,
-      url:
-        url
-          .replace('_TPL_.av1.mp4.m3u8', '')
-          .replace('_TPL_.h264.mp4.m3u8', '') +
-        stream.url,
+      url: url,
 headers: {
       Referer: 'https://xhamster.com/',
       Origin: 'https://xhamster.com',
