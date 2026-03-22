@@ -6,6 +6,7 @@ const Provider = require('./provider');
 const metaCache = new Map();
 const META_TTL = 1000 * 60 * 10;
 
+
 /* =========================
    ✅ ADDED: delay + retry
 ========================= */
@@ -53,11 +54,17 @@ class XhamsterProvider extends Provider {
      ✅ OVERRIDE fetchHtml ONLY
   ========================= */
   async fetchHtml(url) {
-    return fetchWithRetry(
-      (u) => super.fetchHtml(u),
-      url
-    );
-  }
+  return fetchWithRetry(
+    (u) => super.fetchHtml(u, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      }
+    }),
+    url
+  );
+}
 
   getInitialUrl(catalogId) {
 
@@ -125,7 +132,10 @@ class XhamsterProvider extends Provider {
     return [];
   }
 
+logger.warn(`HTML length: ${html.length}`);
+
   const metadataList = [];
+const seen = new Set();
 
   const match = html.match(/window\.initials\s*=\s*(\{.*?\});/s);
 
@@ -136,12 +146,17 @@ class XhamsterProvider extends Provider {
       const videos =
         json?.layoutPage?.videoListProps?.videoThumbProps || [];
 
+logger.warn(`videos in JSON: ${videos.length}`);
+
       for (let i = 0; i < videos.length; i++) {
         if (metadataList.length >= this.limit) break;
 
         const v = videos[i];
 
         if (!v?.pageURL || !v?.title || !v?.thumbURL) continue;
+
+if (seen.has(v.pageURL)) continue;
+  seen.add(v.pageURL);
 
         metadataList.push(
           new meta.MetaPreview(
@@ -155,8 +170,8 @@ class XhamsterProvider extends Provider {
       }
 
       if (metadataList.length > 0) {
-        return metadataList;
-      }
+  return metadataList;
+}
 
     } catch (e) {
       logger.error('JSON parse failed', e);
@@ -164,56 +179,62 @@ class XhamsterProvider extends Provider {
   }
 
   const $ = load(html);
-  let count = 0;
 
-  $('.video-thumb, .thumb-list__item, .thumb-list__item--video').each((_, element) => {
-  if (count >= this.limit) return false;
+  $('.thumb-list__item, .video-thumb, .thumb-list__item--video, .thumb-list__item--premium')
+  .each((_, element) => {
 
-  const $e = $(element);
-  const $a = $e.find('a').first();
+    if (metadataList.length >= this.limit) return false;
 
-  let videoPageUrl = $a.attr('href');
+    const $e = $(element);
+    const $a = $e.find('a').first();
 
-  if (!videoPageUrl) return;
-  if (videoPageUrl.includes('/ff/out')) return;
-  if (videoPageUrl.includes('/moments/')) return;
+    let videoPageUrl = $a.attr('href');
 
-  if (!videoPageUrl.startsWith('http')) {
-    videoPageUrl = this.baseUrl + videoPageUrl;
-  }
+    if (!videoPageUrl) return;
+    if (videoPageUrl.includes('/ff/out')) return;
+    if (videoPageUrl.includes('/moments/')) return;
 
-  const $img = $a.find('img').first();
+    if (!videoPageUrl.startsWith('http')) {
+      videoPageUrl = this.baseUrl + videoPageUrl;
+    }
 
-  let poster =
-    $img.attr('data-src') ||
-    $img.attr('data-original') ||
-    $img.attr('data-preview') ||
-    $img.attr('src');
+if (seen.has(videoPageUrl)) return;
+seen.add(videoPageUrl);
 
-  if (poster && !poster.startsWith('http')) {
-    poster = this.baseUrl + poster;
-  }
+    const $img = $a.find('img').first();
 
-  const title =
-    $img.attr('alt') ||
-    $a.attr('title');
+    let poster =
+      $img.attr('data-src') ||
+      $img.attr('data-original') ||
+      $img.attr('data-preview') ||
+      $img.attr('src');
 
-  if (!title) return;
+    if (poster && !poster.startsWith('http')) {
+      poster = this.baseUrl + poster;
+    }
 
-  metadataList.push(
-    new meta.MetaPreview(
-      videoPageUrl,
-      'movie',
-      title,
-      poster,
-      { videoPageUrl }
-    )
-  );
+    const title =
+      $img.attr('alt') ||
+      $a.attr('title');
 
-  count++;
+    if (!title) return;
+
+    metadataList.push(
+      new meta.MetaPreview(
+        videoPageUrl,
+        'movie',
+        title,
+        poster,
+        { videoPageUrl }
+      )
+    );
 });
 
+  if (metadataList.length >= this.limit / 2) {
   return metadataList;
+}
+
+return metadataList;
 }
 
   async getMetadata(args) {
@@ -327,7 +348,11 @@ if (streamUrl && !streamUrl.startsWith('http')) {
 
     return {
       ...stream,
-      url: url,
+      url:
+  url
+    .replace('_TPL_.av1.mp4.m3u8', '')
+    .replace('_TPL_.h264.mp4.m3u8', '') +
+  stream.url,
 headers: {
       Referer: 'https://xhamster.com/',
       Origin: 'https://xhamster.com',
