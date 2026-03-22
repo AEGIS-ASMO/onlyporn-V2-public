@@ -135,7 +135,7 @@ class XhamsterProvider extends Provider {
      ✅ IMPROVED: full batch fetch + dedupe
   ========================= */
   async fetchCatalog(baseUrl) {
-  const seen = new Set();
+  const globalSeen = new Set(); // across pages
   const fetchedPages = new Set(); // ✅ LOCAL, per request
   const allVideos = [];
   let page = 1;
@@ -152,7 +152,7 @@ while (allVideos.length < this.limit && page <= maxPages) {
 
     const html = await this.fetchHtml(pageUrl);
 
-    const metas = this.getCatalogMetas(html, seen);
+    const metas = this.getCatalogMetas(html, globalSeen);
 
     allVideos.push(...metas);
 
@@ -212,18 +212,20 @@ for (const section of rails) {
       for (const v of videos) {
         if (!v?.pageURL || !v?.title) continue;
         if (seen.has(v.pageURL)) continue;
-        seen.add(v.pageURL);
 
-        metadataList.push(
-          new meta.MetaPreview(
-            v.pageURL,
-            'movie',
-            v.title,
-            v.imageURL || v.thumbURL || v.poster || v.previewImageURL,
-            { videoPageUrl: v.pageURL }
-          )
-        );
-if (metadataList.length >= 100) break;
+// only mark AFTER pushing
+metadataList.push(
+  new meta.MetaPreview(
+    v.pageURL,
+    'movie',
+    v.title,
+    v.imageURL || v.thumbURL || v.poster || v.previewImageURL,
+    { videoPageUrl: v.pageURL }
+  )
+);
+
+seen.add(v.pageURL);
+if (metadataList.length >= 200) break;
       
       }
     } catch (e) {
@@ -235,7 +237,7 @@ if (metadataList.length >= 100) break;
   const $ = load(html);
   $('.thumb-list__item, .video-thumb, .thumb-list__item--video, .thumb-list__item--premium')
     .each((_, element) => {
-      if (metadataList.length >= this.limit) return false;
+      if (metadataList.length >= 200) return false;
 
       const $e = $(element);
       const $a = $e.find('a').first();
@@ -252,6 +254,8 @@ if (metadataList.length >= 100) break;
 
       const title = $img.attr('alt') || $a.attr('title');
       if (!title) return;
+
+logger.warn(`unique videos collected: ${metadataList.length}`);
 
       metadataList.push(
         new meta.MetaPreview(
