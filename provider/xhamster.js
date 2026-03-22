@@ -353,14 +353,30 @@ logger.warn(`unique videos collected: ${metadataList.length}`);
     const poster = json?.videoModel?.thumbURL;
 
     let streamUrl = null;
-    const sources = json?.xplayerSettings?.sources || {};
+const sources = json?.xplayerSettings?.sources || {};
 
-    if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;
-    else if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;
-    else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;
-    else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;
+// Collect all HLS and MP4 URLs
+const allUrls = [];
 
-    if (streamUrl && !streamUrl.startsWith('http')) streamUrl = null;
+if (sources.hls) {
+  for (const codec of Object.values(sources.hls)) {
+    if (codec?.url) allUrls.push(codec.url);
+  }
+}
+if (sources.mp4) {
+  for (const quality of Object.values(sources.mp4)) {
+    if (quality?.url) allUrls.push(quality.url);
+  }
+}
+
+// Pick the first valid URL and clean it
+if (allUrls.length) {
+  streamUrl = allUrls.find(u => u.startsWith('http'));
+  if (streamUrl) {
+    // Remove any xHamster-specific suffixes like ".7700b"
+    streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');
+  }
+}
 
     const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
 
