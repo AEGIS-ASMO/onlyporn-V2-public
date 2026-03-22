@@ -137,45 +137,70 @@ class XhamsterProvider extends Provider {
   /* =========================
      ✅ IMPROVED: full batch fetch + dedupe
   ========================= */
-  async fetchCatalog(baseUrl, categorySlug) {
+  async fetchCatalog(baseUrl, genreName) {
   const globalSeen = new Set();
   const allVideos = [];
   let page = 1;
-
   const maxPages = 10;
+
+  // ✅ Convert genre name to URL slug automatically
+  const categorySlug = genreName
+    ? genreName
+        .toLowerCase()
+        .replace(/\s+/g, '-')   // spaces → dash
+        .replace(/&/g, '')      // remove &
+        .replace(/[^a-z0-9-]/g, '') // remove other invalid chars
+    : null;
 
   while (allVideos.length < this.limit && page <= maxPages) {
     let pageUrl;
 
-    // 1️⃣ API-based fetching for known infinite-scroll categories
+    // 1️⃣ Attempt API fetch for category if slug exists
     if (categorySlug) {
       pageUrl = `https://xhamster.com/api/video-category/${categorySlug}?page=${page}&perPage=30`;
+
       try {
-        const res = await fetchWithRetry(u => super.fetchHtml(u, { headers: { 'User-Agent': 'Mozilla/5.0' }}), pageUrl);
+        const res = await fetchWithRetry(
+          (u) => super.fetchHtml(u, { headers: { 'User-Agent': 'Mozilla/5.0' } }),
+          pageUrl
+        );
+
         const json = JSON.parse(res);
-        const metas = json.videos.map(v => new meta.MetaPreview(
-          v.pageURL, 'movie', v.title, v.thumbURL, { videoPageUrl: v.pageURL }
-        ));
-        for (const m of metas) {
-          if (!globalSeen.has(m.id)) {
-            allVideos.push(m);
-            globalSeen.add(m.id);
+
+        if (!json?.videos?.length) throw new Error('API empty, fallback to HTML');
+
+        // Map API videos to MetaPreview objects
+        for (const v of json.videos) {
+          if (!globalSeen.has(v.pageURL)) {
+            allVideos.push(
+              new meta.MetaPreview(
+                v.pageURL,
+                'movie',
+                v.title,
+                v.thumbURL,
+                { videoPageUrl: v.pageURL }
+              )
+            );
+            globalSeen.add(v.pageURL);
           }
         }
-        if (!metas.length) break;
-      } catch (e) {
-        logger.warn('API fallback failed, switching to HTML');
-        pageUrl = `${this.baseUrl}/categories/${categorySlug}`;
+
+        page++;
+        continue; // go to next API page
+      } catch (err) {
+        logger.warn(`API fetch failed for ${categorySlug}: ${err.message}`);
+        // fallback to HTML below
       }
     }
 
-    // 2️⃣ Fallback: fetch HTML
-    if (!pageUrl || pageUrl.includes(this.baseUrl)) {
-      const html = await this.fetchHtml(pageUrl);
-      const metas = this.getCatalogMetas(html, globalSeen);
-      allVideos.push(...metas);
-      if (!metas.length && page > 2) break;
-    }
+    // 2️⃣ HTML fallback (for first page or API failure)
+    pageUrl = `${this.baseUrl}/categories/${categorySlug || ''}`;
+    const html = await this.fetchHtml(pageUrl);
+    const metas = this.getCatalogMetas(html, globalSeen);
+
+    if (!metas.length && page > 1) break; // stop if no more videos
+
+    allVideos.push(...metas);
 
     page++;
     await delay(300 + Math.random() * 200);
