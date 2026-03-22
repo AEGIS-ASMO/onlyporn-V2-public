@@ -140,7 +140,9 @@ class XhamsterProvider extends Provider {
   const allVideos = [];
   let page = 1;
 
-  while (allVideos.length < this.limit) {
+  const maxPages = 5;
+
+while (allVideos.length < this.limit && page <= maxPages) {
     const pageUrl = this.handlePagination(baseUrl, { extra: { skip: page } });
 
     if (fetchedPages.has(pageUrl)) break; // ✅ now correct
@@ -183,13 +185,19 @@ if (json?.layoutPage?.videoListProps?.videoThumbProps) {
 }
 
 // 🔥 additional rails (THIS is what you're missing)
-const rails = json?.layoutPage?.sections || json?.layoutPage?.content || [];
+let rails = json?.layoutPage?.sections || json?.layoutPage?.content || [];
+
+if (!Array.isArray(rails)) {
+  rails = Object.values(rails);
+}
 
 for (const section of rails) {
+  if (!section || typeof section !== 'object') continue;
+
   const items =
-    section?.videoListProps?.videoThumbProps ||
-    section?.videoThumbProps ||
-    section?.videos;
+    section.videoListProps?.videoThumbProps ||
+    section.videoThumbProps ||
+    section.videos;
 
   if (Array.isArray(items)) {
     videos.push(...items);
@@ -207,12 +215,13 @@ for (const section of rails) {
             v.pageURL,
             'movie',
             v.title,
-            v.imageURL || v.thumbURL || v.poster || v.previewImageURL
+            v.imageURL || v.thumbURL || v.poster || v.previewImageURL,
             { videoPageUrl: v.pageURL }
           )
         );
 
-        if (metadataList.length >= this.limit) break;
+        if (metas.length < 5) break;
+await delay(800);
       }
     } catch (e) {
       logger.error('JSON parse failed', e);
