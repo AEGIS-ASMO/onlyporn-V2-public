@@ -50,10 +50,7 @@ class XhamsterProvider extends Provider {
      ✅ OVERRIDE fetchHtml ONLY
   ========================= */
   async fetchHtml(url) {
-if (url.includes('.m3u8')) {
-  logger.warn('Skipping HLS fetch');
-  return '';
-}
+
   // ✅ prevent duplicate parallel fetches
   if (inFlight.has(url)) {
     return inFlight.get(url);
