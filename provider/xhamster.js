@@ -157,7 +157,7 @@ class XhamsterProvider extends Provider {
 
     // 1️⃣ Attempt API fetch for category if slug exists
     if (categorySlug) {
-      pageUrl = `https://xhamster.com/api/video-category/${categorySlug}?page=${page}&perPage=30`;
+      pageUrl = `https://xhamster.com/api/video-category/${categorySlug}?page=${page}&perPage=40`;
 
       try {
         const res = await fetchWithRetry(
@@ -194,7 +194,7 @@ class XhamsterProvider extends Provider {
     }
 
     // 2️⃣ HTML fallback (for first page or API failure)
-    pageUrl = `${this.baseUrl}/categories/${categorySlug || ''}`;
+    pageUrl = `${this.baseUrl}/categories/${categorySlug || ''}/${page}/`;
     const html = await this.fetchHtml(pageUrl);
     const metas = this.getCatalogMetas(html, globalSeen);
 
@@ -269,7 +269,7 @@ metadataList.push(
 );
 
 seen.add(v.pageURL);
-if (metadataList.length >= this.limit) break;
+if (metadataList.length >= 100) break;
       
       }
     } catch (e) {
