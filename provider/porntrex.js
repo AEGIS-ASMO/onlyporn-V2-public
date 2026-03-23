@@ -282,35 +282,46 @@ if (!height) continue; // skip invalid/fake resolutions
     // ✅ FALLBACK TO MP4  
     // =========================  
     // ✅ FALLBACK TO MP4 - only real resolutions
+// =========================
+// ✅ FALLBACK TO MP4 (SMART DETECTION)
+// =========================
 if (!streams.length) {
-  const matches = embedHtml.match(/https?:\/\/[^\s"'<>]+_(\d{3,4})p\.mp4[^\s"'<>]*/g);
+  const qualities = [2160, 1440, 1080, 720, 480, 360];
 
-  if (matches && matches.length) {
-    const unique = new Map();
+  const generated = [];
 
-    for (const url of matches) {
-      const qMatch = url.match(/_(\d{3,4})p/);
-      if (!qMatch) continue;
+  for (const q of qualities) {
+    const qUrl = videoUrl.replace(/_(\d{3,4})p\.mp4/i, `_${q}p.mp4`);
 
-      const q = qMatch[1];
-
-      // avoid duplicates
-      if (!unique.has(q)) {
-        unique.set(q, url);
-      }
-    }
-
-    for (const [q, url] of unique) {
-      streams.push({
-        title: `${q}p`,
-        url
+    try {
+      const res = await fetch(qUrl, {
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Referer': videoPageUrl,
+          'Origin': this.baseUrl
+        }
       });
-    }
 
-    logger.debug(`Porntrex: MP4 qualities found → ${[...unique.keys()].join(', ')}`);
+      if (res.ok && res.headers.get('content-length') > 1000000) {
+        generated.push({
+          title: `${q}p`,
+          url: qUrl
+        });
+
+        logger.debug(`Porntrex: ✅ Found ${q}p`);
+      }
+    } catch {
+      logger.debug(`Porntrex: ❌ ${q}p not available`);
+    }
   }
 
-  // final fallback
+  // sort highest first
+  generated.sort((a, b) => parseInt(b.title) - parseInt(a.title));
+
+  streams.push(...generated);
+
+  // fallback if NOTHING worked
   if (!streams.length) {
     streams.push({ title: 'Auto', url: videoUrl });
   }
