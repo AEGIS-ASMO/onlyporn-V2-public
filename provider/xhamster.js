@@ -157,7 +157,7 @@ class XhamsterProvider extends Provider {
 
     // 1️⃣ Attempt API fetch for category if slug exists
     if (categorySlug) {
-      pageUrl = `https://xhamster.com/api/video-category/${categorySlug}?page=${page}&perPage=40`;
+      pageUrl = `https://xhamster.com/api/video-category/${categorySlug}?page=${page}&perPage=100`;
 
       try {
         const res = await fetch(pageUrl, {
@@ -181,7 +181,7 @@ const json = await res.json();
             );
             globalSeen.add(v.pageURL);
           }
-if (allVideos.length >= this.limit) break;
+
         }
 
         page++;
@@ -197,7 +197,10 @@ if (allVideos.length >= this.limit) break;
     const html = await this.fetchHtml(pageUrl);
     const metas = this.getCatalogMetas(html, globalSeen);
 
-    if (!metas.length && page > 1) break; // stop if no more videos
+    if (!metas.length) {
+  logger.warn(`No videos on page ${page}, stopping`);
+  break;
+}
 
     allVideos.push(...metas);
 
@@ -253,24 +256,21 @@ for (const section of rails) {
       logger.warn(`videos in JSON: ${videos.length}`);
 
       for (const v of videos) {
-        if (!v?.pageURL || !v?.title) continue;
-        if (seen.has(v.pageURL)) continue;
+  if (!v?.pageURL || !v?.title) continue;
+  if (seen.has(v.pageURL)) continue;
 
-// only mark AFTER pushing
-metadataList.push(
-  new meta.MetaPreview(
-    v.pageURL,
-    'movie',
-    v.title,
-    v.imageURL || v.thumbURL || v.poster || v.previewImageURL,
-    { videoPageUrl: v.pageURL }
-  )
-);
+  metadataList.push(
+    new meta.MetaPreview(
+      v.pageURL,
+      'movie',
+      v.title,
+      v.imageURL || v.thumbURL || v.poster || v.previewImageURL,
+      { videoPageUrl: v.pageURL }
+    )
+  );
 
-seen.add(v.pageURL);
-if (metadataList.length >= this.limit) break;
-      
-      }
+  seen.add(v.pageURL);
+}
     } catch (e) {
       logger.error('JSON parse failed', e);
     }
@@ -280,7 +280,7 @@ if (metadataList.length >= this.limit) break;
   const $ = load(html);
   $('.thumb-list__item, .video-thumb, .thumb-list__item--video, .thumb-list__item--premium')
     .each((_, element) => {
-      if (metadataList.length >= this.limit) return false;
+      
 
       const $e = $(element);
       const $a = $e.find('a').first();
