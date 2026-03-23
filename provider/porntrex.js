@@ -165,77 +165,119 @@ return request;
     logger.debug(`Porntrex: video cache hit for ${id}`);
     return cached.data;
   }
-// 🔁 PREVENT DUPLICATE PARSE
-if (this.videoPending.has(id)) {
-  return this.videoPending.get(id);
-}
 
-const request = (async () => {
-
-  const videoIdMatch = id.match(/\d+/);
-  if (!videoIdMatch) {
-    logger.warn(`Porntrex: invalid video id "${id}"`);
-    return null;
+  // 🔁 PREVENT DUPLICATE PARSE
+  if (this.videoPending.has(id)) {
+    return this.videoPending.get(id);
   }
 
-  const videoId = videoIdMatch[0];
-  const embedUrl = `${this.baseUrl}embed/${videoId}`;
+  const request = (async () => {
 
-  const embedHtml = await this.fetchHtml(embedUrl);
+    const videoIdMatch = id.match(/\d+/);
+    if (!videoIdMatch) {
+      logger.warn(`Porntrex: invalid video id "${id}"`);
+      return null;
+    }
 
-  const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
-  const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
-  const videoMatch = embedHtml.match(/video_url:\s*'([^']+)'/);
+    const videoId = videoIdMatch[0];
+    const embedUrl = `${this.baseUrl}embed/${videoId}`;
 
-  if (!videoMatch) {
-    logger.warn(`Porntrex: video_url not found for ${videoId}`);
-    return null;
-  }
+    const embedHtml = await this.fetchHtml(embedUrl);
 
-  let videoUrl = videoMatch[1];
-  if (videoUrl.startsWith("//")) videoUrl = "https:" + videoUrl;
+    const titleMatch = embedHtml.match(/video_title:\s*'([^']+)'/);
+    const previewMatch = embedHtml.match(/preview_url:\s*'([^']+)'/);
+    const videoMatch = embedHtml.match(/video_url:\s*'([^']+)'/);
 
-  let poster = previewMatch ? previewMatch[1] : null;
-  if (poster && poster.startsWith("//")) poster = "https:" + poster;
+    if (!videoMatch) {
+      logger.warn(`Porntrex: video_url not found for ${videoId}`);
+      return null;
+    }
 
-  const finalStream = await this.resolveStream(videoUrl);
+    let videoUrl = videoMatch[1];
+    if (videoUrl.startsWith("//")) videoUrl = "https:" + videoUrl;
 
-  const result = {
-    metaResponse: new meta.MetaResponse(
-      id,
-      "movie",
-      titleMatch ? titleMatch[1] : "Porntrex Video",
-      { description: titleMatch ? titleMatch[1] : "Porntrex Video", background: poster }
-    ),
-    videoPageUrl: finalStream,
-    behaviorHints: {
-      notWebReady: true,
-      headers: {
-        Referer: this.baseUrl,
-        Origin: this.baseUrl,
-        'User-Agent': 'Mozilla/5.0'
+    let poster = previewMatch ? previewMatch[1] : null;
+    if (poster && poster.startsWith("//")) poster = "https:" + poster;
+
+    /* =========================
+       ✅ NEW: MULTI-QUALITY LOGIC
+    ========================= */
+
+    const qualities = [2160, 1080, 720]; // keep it fast
+    const streams = [];
+
+    const base = videoUrl.replace(/\.mp4$/, '');
+
+    for (const q of qualities) {
+      const qUrl = `${base}_${q}p.mp4`;
+
+      try {
+        const finalUrl = await this.resolveStream(qUrl);
+
+        if (finalUrl) {
+          streams.push({
+            title: `${q}p`,
+            url: finalUrl
+          });
+        }
+      } catch (e) {
+        logger.debug(`Porntrex: ${q}p not available`);
       }
     }
-  };
 
-  // ✅ SAVE CACHE
-  this.videoCache.set(id, {
-    data: result,
-    time: Date.now()
-  });
+    // fallback if no qualities worked
+    if (!streams.length) {
+      const fallback = await this.resolveStream(videoUrl);
+      streams.push({
+        title: "Auto",
+        url: fallback
+      });
+    }
 
-  return result;
+    const result = {
+      metaResponse: new meta.MetaResponse(
+        id,
+        "movie",
+        titleMatch ? titleMatch[1] : "Porntrex Video",
+        {
+          description: titleMatch ? titleMatch[1] : "Porntrex Video",
+          background: poster
+        }
+      ),
 
-})();
+      // 🔥 IMPORTANT: return streams array instead of single URL
+      streams: streams.map(s => ({
+        title: s.title,
+        url: s.url,
+        behaviorHints: {
+          notWebReady: true,
+          headers: {
+            Referer: this.baseUrl,
+            Origin: this.baseUrl,
+            'User-Agent': 'Mozilla/5.0'
+          }
+        }
+      }))
+    };
 
-this.videoPending.set(id, request);
+    // ✅ SAVE CACHE
+    this.videoCache.set(id, {
+      data: result,
+      time: Date.now()
+    });
 
-try {
-  const result = await request;
-  return result;
-} finally {
-  this.videoPending.delete(id);
-}
+    return result;
+
+  })();
+
+  this.videoPending.set(id, request);
+
+  try {
+    const result = await request;
+    return result;
+  } finally {
+    this.videoPending.delete(id);
+  }
 }
 }
 
