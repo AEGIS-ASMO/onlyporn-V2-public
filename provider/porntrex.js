@@ -221,7 +221,7 @@ async getStreams({ videoPageUrl }) {
     });
 
     // ✅ Log estimated size/bitrate
-    this.logBitrate(uri, height + 'p').catch(e => logger.warn(e));
+    await this.logBitrate(uri, height + 'p');
   }
 } else {
       streams.push({
@@ -323,7 +323,7 @@ async getStreams({ videoPageUrl }) {
 
 for (const s of streams) {
   if (/\.mp4$/i.test(s.url)) {
-    this.logBitrate(s.url, s.title).catch(e => logger.warn(e));
+    await this.logBitrate(s.url, s.title);
   }
 }
 
