@@ -7,6 +7,20 @@ const fetch = require("node-fetch");
 class PorntrexProvider extends Provider {
 
   constructor() {
+async logBitrate(url, title) {
+  try {
+    const res = await fetch(url, { method: 'HEAD' });
+    const length = res.headers.get('content-length');
+    if (length) {
+      const sizeMB = parseInt(length) / (1024 * 1024);
+      logger.info(`Porntrex: Stream ${title} ~${sizeMB.toFixed(2)} MB`);
+    } else {
+      logger.info(`Porntrex: Stream ${title} size unknown`);
+    }
+  } catch (e) {
+    logger.warn(`Porntrex: Failed to fetch HEAD for ${title}`, e);
+  }
+}
     super('https://porntrex.com/', 'porntrex');
     this.dataset = {};
     this.metas = {};
@@ -188,20 +202,26 @@ async getStreams({ videoPageUrl }) {
     const streams = [];
 
     if (parser.manifest.playlists && parser.manifest.playlists.length) {
-      for (const playlist of parser.manifest.playlists) {
-        const height = playlist.attributes?.RESOLUTION?.height || 'auto';
-        const uri = playlist.uri.startsWith('http')
-          ? playlist.uri
-          : new URL(playlist.uri, videoPageUrl).href;
+  for (const playlist of parser.manifest.playlists) {
+    const height = playlist.attributes?.RESOLUTION?.height || 'auto';
+    const bandwidth = playlist.attributes?.BANDWIDTH || 0;
+    const uri = playlist.uri.startsWith('http')
+      ? playlist.uri
+      : new URL(playlist.uri, videoPageUrl).href;
 
-        streams.push({
-          type: 'movie',
-          url: uri,
-          title: height + 'p',
-          behaviorHints: { notWebReady: true }
-        });
-      }
-    } else {
+    logger.info(`Porntrex: Detected stream ${height}p, bandwidth: ${bandwidth}bps, url: ${uri}`);
+
+    streams.push({
+      type: 'movie',
+      url: uri,
+      title: height + 'p',
+      behaviorHints: { notWebReady: true }
+    });
+
+    // ✅ Log estimated size/bitrate
+    this.logBitrate(uri, height + 'p');
+  }
+} else {
       streams.push({
         type: 'movie',
         url: videoPageUrl,
@@ -298,6 +318,12 @@ async getStreams({ videoPageUrl }) {
         streams.push({ title: 'Auto', url: fallback });
       }
     }
+
+for (const s of streams) {
+  if (/\.mp4$/i.test(s.url)) {
+    this.logBitrate(s.url, s.title);
+  }
+}
 
     const result = {
       metaResponse: new meta.MetaResponse(
