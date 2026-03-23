@@ -189,7 +189,8 @@ async getStreams({ videoPageUrl }) {
   
     if (parser.manifest.playlists && parser.manifest.playlists.length) {  
       for (const playlist of parser.manifest.playlists) {  
-        const height = playlist.attributes?.RESOLUTION?.height || 'auto';  
+        const height = playlist.attributes?.RESOLUTION?.height;
+if (!height) continue; // skip invalid/fake resolutions  
         const uri = playlist.uri.startsWith('http')  
           ? playlist.uri  
           : new URL(playlist.uri, videoPageUrl).href;  
@@ -285,16 +286,15 @@ if (!streams.length) {
   const base = videoUrl.replace(/\.mp4$/, '');
   const qualities = [2160, 1080, 720];
 
-  for (const q of qualities) {
-    const qUrl = `${base}_${q}p.mp4`;
-    try {
-      const res = await fetch(qUrl, { method: 'HEAD' });
-      if (res.ok) {
-        streams.push({ title: `${q}p`, url: qUrl });
-      } else {
-        logger.debug(`Porntrex: ${q}p MP4 not found (status ${res.status})`);
-      }
-    } catch {
+  for (const q of qualities) {  
+  const qUrl = `${base}_${q}p.mp4`;  
+  try {  
+    const res = await fetch(qUrl, { method: 'HEAD', redirect: 'manual' });  
+    if (res.ok && res.headers.get('content-length') > 0) {  
+      streams.push({ title: `${q}p`, url: qUrl });  
+      break; // stop at the first valid resolution
+    }  
+  } catch {
       logger.debug(`Porntrex: ${q}p MP4 fetch failed`);
     }
   }
