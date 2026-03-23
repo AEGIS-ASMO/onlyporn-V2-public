@@ -7,6 +7,18 @@ const fetch = require("node-fetch");
 class PorntrexProvider extends Provider {
 
   constructor() {
+
+    super('https://porntrex.com/', 'porntrex');
+    this.dataset = {};
+    this.metas = {};
+    this.videoCache = new Map(); // 🧠 cache parsed video pages
+this.videoCacheTTL = 1000 * 60 * 5; // 5 min
+    this.streamCache = new Map(); // 🎥 cache resolved streams
+this.streamCacheTTL = 1000 * 60 * 10; // 10 min
+this.streamPending = new Map();
+this.videoPending = new Map();
+  }
+
 async logBitrate(url, title) {
   try {
     const res = await fetch(url, { method: 'HEAD' });
@@ -21,16 +33,6 @@ async logBitrate(url, title) {
     logger.warn(`Porntrex: Failed to fetch HEAD for ${title}`, e);
   }
 }
-    super('https://porntrex.com/', 'porntrex');
-    this.dataset = {};
-    this.metas = {};
-    this.videoCache = new Map(); // 🧠 cache parsed video pages
-this.videoCacheTTL = 1000 * 60 * 5; // 5 min
-    this.streamCache = new Map(); // 🎥 cache resolved streams
-this.streamCacheTTL = 1000 * 60 * 10; // 10 min
-this.streamPending = new Map();
-this.videoPending = new Map();
-  }
 
   static create() {
     return new PorntrexProvider();
@@ -219,7 +221,7 @@ async getStreams({ videoPageUrl }) {
     });
 
     // ✅ Log estimated size/bitrate
-    this.logBitrate(uri, height + 'p');
+    this.logBitrate(uri, height + 'p').catch(e => logger.warn(e));
   }
 } else {
       streams.push({
@@ -321,7 +323,7 @@ async getStreams({ videoPageUrl }) {
 
 for (const s of streams) {
   if (/\.mp4$/i.test(s.url)) {
-    this.logBitrate(s.url, s.title);
+    this.logBitrate(s.url, s.title).catch(e => logger.warn(e));
   }
 }
 
