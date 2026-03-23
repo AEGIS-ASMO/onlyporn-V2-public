@@ -342,62 +342,39 @@ if (!streams.length && playerConfig?.video_files) {
   }
 }    
 // =========================
-// 🔥 XHR-LEVEL EXTRACTION (REAL METHOD)
+// 🔥 REAL STREAM RESOLUTION (FOLLOW REDIRECT)
 // =========================
 if (!streams.length) {
-
-  const match = videoUrl.match(/(\/get_file\/.*\/\d+)/i);
-
-  if (match) {
-    const basePath = match[1];
-
-    const qualities = [2160, 1440, 1080, 720, 480, 360];
-
-    const found = [];
-
-    const origin = new URL(videoUrl).origin;
-
-for (const q of qualities) {
-  const qUrl = `${origin}${basePath}_${q}p.mp4`;
-
-      try {
-        const res = await fetch(qUrl, {
-          method: 'GET',
-          headers: {
-            'Range': 'bytes=0-1', // 🔥 bypass HEAD blocking
-            'User-Agent': 'Mozilla/5.0',
-            'Referer': videoPageUrl,
-            'Origin': this.baseUrl
-          }
-        });
-
-        const contentType = res.headers.get('content-type') || '';
-
-if ((res.status === 206 || res.ok) && contentType.includes('video')) {
-          found.push({
-            title: `${q}p`,
-            url: qUrl
-          });
-
-          logger.debug(`Porntrex: ✅ XHR found ${q}p`);
-        }
-      } catch {
-        logger.debug(`Porntrex: ❌ XHR missing ${q}p`);
+  try {
+    const res = await fetch(videoUrl, {
+      method: 'GET',
+      redirect: 'manual', // 👈 IMPORTANT
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': videoPageUrl,
+        'Origin': this.baseUrl,
+        'Range': 'bytes=0-1'
       }
+    });
+
+    const location = res.headers.get('location');
+
+    if (location) {
+      logger.debug(`Porntrex: resolved real stream via redirect`);
+
+      streams.push({
+        title: 'Auto',
+        url: location
+      });
+    } else {
+      logger.warn(`Porntrex: no redirect found, using original`);
+      streams.push({ title: 'Auto', url: videoUrl });
     }
 
-    // sort highest first
-    found.sort((a, b) => parseInt(b.title) - parseInt(a.title));
-
-    streams.push(...found);
+  } catch (e) {
+    logger.warn(`Porntrex: stream resolve failed`, e);
+    streams.push({ title: 'Auto', url: videoUrl });
   }
-}
-
-// =========================
-// 🛑 FINAL FALLBACK
-// =========================
-if (!streams.length) {
-  streams.push({ title: 'Auto', url: videoUrl });
 }  
   
     const result = {  
