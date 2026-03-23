@@ -137,82 +137,81 @@ class XhamsterProvider extends Provider {
   /* =========================  
      ✅ IMPROVED: full batch fetch + dedupe  
   ========================= */  
-  async fetchCatalog(baseUrl, genreName) {  
-  const globalSeen = new Set();  
-  const allVideos = [];    
+  async fetchCatalog(baseUrl, genreName) {
+  const globalSeen = new Set();
+  const allVideos = [];
+
+  const categorySlug = genreName
+    ? genreName
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/&/g, '')
+        .replace(/[^a-z0-9-]/g, '')
+    : null;
+
+  if (!categorySlug) return [];
+
+  const size = 60;
+  let page = 0;
   const maxPages = 20;
 
-while (allVideos.length < this.limit && page < maxPages)  
-  
-  const categorySlug = genreName  
-    ? genreName  
-        .toLowerCase()  
-        .replace(/\s+/g, '-')  
-        .replace(/&/g, '')  
-        .replace(/[^a-z0-9-]/g, '')  
-    : null;  
-  
-  if (!categorySlug) return [];  
-  
-  const size = 60;  
-let page = 0;  
-  
-while (allVideos.length < this.limit) {  
-  
-  const offset = page * size;  
-  
-  const apiUrl = `https://xhamster.com/api/v4/videos?category=${categorySlug}&from=${offset}&size=${size}`;  
-  
-  try {  
-    const res = await fetch(apiUrl, {  
-      headers: {  
-        'User-Agent': 'Mozilla/5.0',  
-        'Accept': 'application/json',  
-        'Referer': `${this.baseUrl}/categories/${categorySlug}`  
-      }  
-    });
-if (!res.ok) {
-  throw new Error(`HTTP ${res.status}`);
-}  
-  
-    const json = await res.json();  
-    const videos = json?.videos || [];  
-  
-    logger.warn(`API offset ${offset}: ${videos.length}`);  
-  
-    if (!videos.length) break;  
-  
-    for (const v of videos) {  
-      const url = v.url || v.pageURL;  
-  
-      if (!url || !v.title) continue;  
-      if (globalSeen.has(url)) continue;  
-  
-      allVideos.push(  
-        new meta.MetaPreview(  
-          url,  
-          'movie',  
-          v.title,  
-          v.thumb || v.thumbURL,  
-          { videoPageUrl: url }  
-        )  
-      );  
-  
-      globalSeen.add(url);  
-  
-      if (allVideos.length >= this.limit) break;  
-    }  
-  
-    page++;  
-    await delay(200 + Math.random() * 200);  
-  
-  } catch (err) {  
-    logger.warn(`API failed at offset ${offset}: ${err.message}`);  
-    page++; // skip instead of breaking  
-  }  
-}    
-  
-  return allVideos.slice(0, this.limit);  
+  while (allVideos.length < this.limit && page < maxPages) {
+
+    const offset = page * size;
+
+    const apiUrl = `https://xhamster.com/api/v4/videos?category=${categorySlug}&from=${offset}&size=${size}`;
+
+    try {
+      const res = await fetch(apiUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Accept': 'application/json',
+          'Referer': `${this.baseUrl}/categories/${categorySlug}`
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const json = await res.json();
+      const videos = json?.videos || [];
+
+      logger.warn(`API offset ${offset}: ${videos.length}`);
+
+      if (!videos.length) break;
+
+      for (const v of videos) {
+        const url = v.url || v.pageURL;
+
+        if (!url || !v.title) continue;
+        if (globalSeen.has(url)) continue;
+
+        allVideos.push(
+          new meta.MetaPreview(
+            url,
+            'movie',
+            v.title,
+            v.thumb || v.thumbURL,
+            { videoPageUrl: url }
+          )
+        );
+
+        globalSeen.add(url);
+
+        if (allVideos.length >= this.limit) break;
+      }
+
+      page++;
+      await delay(200 + Math.random() * 200);
+
+    } catch (err) {
+      logger.warn(`API failed at offset ${offset}: ${err.message}`);
+      page++;
+    }
+  }
+
+  return allVideos.slice(0, this.limit);
 }  
   
   /* =========================  
