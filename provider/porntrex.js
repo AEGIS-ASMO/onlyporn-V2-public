@@ -158,7 +158,6 @@ return request;
 }
 
   async parseVideoPage({ id }) {
-
   // ✅ CACHE HIT
   const cached = this.videoCache.get(id);
   if (cached && (Date.now() - cached.time < this.videoCacheTTL)) {
@@ -172,7 +171,6 @@ return request;
   }
 
   const request = (async () => {
-
     const videoIdMatch = id.match(/\d+/);
     if (!videoIdMatch) {
       logger.warn(`Porntrex: invalid video id "${id}"`);
@@ -199,39 +197,51 @@ return request;
     let poster = previewMatch ? previewMatch[1] : null;
     if (poster && poster.startsWith("//")) poster = "https:" + poster;
 
-    /* =========================
-       ✅ NEW: MULTI-QUALITY LOGIC
-    ========================= */
+    // ✅ Detect HLS first
+    const hlsMatch = embedHtml.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
+    if (hlsMatch) {
+      let hlsUrl = hlsMatch[0];
+      if (hlsUrl.startsWith("//")) hlsUrl = "https:" + hlsUrl;
 
-    const qualities = [2160, 1080, 720]; // keep it fast
+      logger.debug(`Porntrex: HLS stream detected for video ${id}`);
+
+      const hlsStreams = await this.getStreams({ videoPageUrl: hlsUrl });
+
+      const result = {
+        metaResponse: new meta.MetaResponse(
+          id,
+          "movie",
+          titleMatch ? titleMatch[1] : "Porntrex Video",
+          { description: titleMatch ? titleMatch[1] : "Porntrex Video", background: poster }
+        ),
+        streams: hlsStreams.streams
+      };
+
+      this.videoCache.set(id, { data: result, time: Date.now() });
+      return result;
+    }
+
+    // ✅ Fallback to MP4 qualities if no HLS
+    const qualities = [2160, 1080, 720];
     const streams = [];
-
     const base = videoUrl.replace(/\.mp4$/, '');
 
     for (const q of qualities) {
       const qUrl = `${base}_${q}p.mp4`;
-
       try {
         const finalUrl = await this.resolveStream(qUrl);
-
         if (finalUrl) {
-          streams.push({
-            title: `${q}p`,
-            url: finalUrl
-          });
+          streams.push({ title: `${q}p`, url: finalUrl });
         }
       } catch (e) {
         logger.debug(`Porntrex: ${q}p not available`);
       }
     }
 
-    // fallback if no qualities worked
+    // fallback to base MP4 if no qualities
     if (!streams.length) {
       const fallback = await this.resolveStream(videoUrl);
-      streams.push({
-        title: "Auto",
-        url: fallback
-      });
+      streams.push({ title: "Auto", url: fallback });
     }
 
     const result = {
@@ -239,13 +249,8 @@ return request;
         id,
         "movie",
         titleMatch ? titleMatch[1] : "Porntrex Video",
-        {
-          description: titleMatch ? titleMatch[1] : "Porntrex Video",
-          background: poster
-        }
+        { description: titleMatch ? titleMatch[1] : "Porntrex Video", background: poster }
       ),
-
-      // 🔥 IMPORTANT: return streams array instead of single URL
       streams: streams.map(s => ({
         title: s.title,
         url: s.url,
@@ -254,20 +259,16 @@ return request;
           headers: {
             Referer: this.baseUrl,
             Origin: this.baseUrl,
-            'User-Agent': 'Mozilla/5.0'
+            "User-Agent": "Mozilla/5.0"
           }
         }
       }))
     };
 
     // ✅ SAVE CACHE
-    this.videoCache.set(id, {
-      data: result,
-      time: Date.now()
-    });
+    this.videoCache.set(id, { data: result, time: Date.now() });
 
     return result;
-
   })();
 
   this.videoPending.set(id, request);
