@@ -140,71 +140,71 @@ class XhamsterProvider extends Provider {
   async fetchCatalog(baseUrl, genreName) {
   const globalSeen = new Set();
   const allVideos = [];
+  let page = 1;
+  const maxPages = 10;
 
+  // ✅ Convert genre name to URL slug automatically
   const categorySlug = genreName
     ? genreName
         .toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/&/g, '')
-        .replace(/[^a-z0-9-]/g, '')
+        .replace(/\s+/g, '-')   // spaces → dash
+        .replace(/&/g, '')      // remove &
+        .replace(/[^a-z0-9-]/g, '') // remove other invalid chars
     : null;
 
-  if (!categorySlug) return [];
+  while (allVideos.length < this.limit && page <= maxPages) {
+    let pageUrl;
 
-  const size = 60;
-let page = 0;
+    // 1️⃣ Attempt API fetch for category if slug exists
+    if (categorySlug) {
+      pageUrl = `https://xhamster.com/api/video-category/${categorySlug}?page=${page}&perPage=30`;
 
-while (allVideos.length < this.limit) {
+      try {
+        const res = await fetchWithRetry(
+          (u) => super.fetchHtml(u, { headers: { 'User-Agent': 'Mozilla/5.0' } }),
+          pageUrl
+        );
 
-  const offset = page * size;
+        const json = JSON.parse(res);
 
-  const apiUrl = `https://xhamster.com/api/v4/videos?category=${categorySlug}&from=${offset}&size=${size}`;
+        if (!json?.videos?.length) throw new Error('API empty, fallback to HTML');
 
-  try {
-    const res = await fetch(apiUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-        'Accept': 'application/json',
-        'Referer': `${this.baseUrl}/categories/${categorySlug}`
+        // Map API videos to MetaPreview objects
+        for (const v of json.videos) {
+          if (!globalSeen.has(v.pageURL)) {
+            allVideos.push(
+              new meta.MetaPreview(
+                v.pageURL,
+                'movie',
+                v.title,
+                v.thumbURL,
+                { videoPageUrl: v.pageURL }
+              )
+            );
+            globalSeen.add(v.pageURL);
+          }
+        }
+
+        page++;
+        continue; // go to next API page
+      } catch (err) {
+        logger.warn(`API fetch failed for ${categorySlug}: ${err.message}`);
+        // fallback to HTML below
       }
-    });
-
-    const json = await res.json();
-    const videos = json?.videos || [];
-
-    logger.warn(`API offset ${offset}: ${videos.length}`);
-
-    if (!videos.length) break;
-
-    for (const v of videos) {
-      const url = v.url || v.pageURL;
-
-      if (!url || !v.title) continue;
-      if (globalSeen.has(url)) continue;
-
-      allVideos.push(
-        new meta.MetaPreview(
-          url,
-          'movie',
-          v.title,
-          v.thumb || v.thumbURL,
-          { videoPageUrl: url }
-        )
-      );
-
-      globalSeen.add(url);
-
-      if (allVideos.length >= this.limit) break;
     }
 
-    page++;
-    await delay(200 + Math.random() * 200);
+    // 2️⃣ HTML fallback (for first page or API failure)
+    pageUrl = `${this.baseUrl}/categories/${categorySlug || ''}`;
+    const html = await this.fetchHtml(pageUrl);
+    const metas = this.getCatalogMetas(html, globalSeen);
 
-  } catch (err) {
-    logger.warn(`API failed at offset ${offset}: ${err.message}`);
-    page++; // skip instead of breaking
+    if (!metas.length && page > 1) break; // stop if no more videos
+
+    allVideos.push(...metas);
+
+    page++;
+    await delay(300 + Math.random() * 200);
   }
-}
 
   return allVideos.slice(0, this.limit);
 }
@@ -254,21 +254,24 @@ for (const section of rails) {
       logger.warn(`videos in JSON: ${videos.length}`);
 
       for (const v of videos) {
-  if (!v?.pageURL || !v?.title) continue;
-  if (seen.has(v.pageURL)) continue;
+        if (!v?.pageURL || !v?.title) continue;
+        if (seen.has(v.pageURL)) continue;
 
-  metadataList.push(
-    new meta.MetaPreview(
-      v.pageURL,
-      'movie',
-      v.title,
-      v.imageURL || v.thumbURL || v.poster || v.previewImageURL,
-      { videoPageUrl: v.pageURL }
-    )
-  );
+// only mark AFTER pushing
+metadataList.push(
+  new meta.MetaPreview(
+    v.pageURL,
+    'movie',
+    v.title,
+    v.imageURL || v.thumbURL || v.poster || v.previewImageURL,
+    { videoPageUrl: v.pageURL }
+  )
+);
 
-  seen.add(v.pageURL);
-}
+seen.add(v.pageURL);
+if (metadataList.length >= this.limit) break;
+      
+      }
     } catch (e) {
       logger.error('JSON parse failed', e);
     }
@@ -278,7 +281,7 @@ for (const section of rails) {
   const $ = load(html);
   $('.thumb-list__item, .video-thumb, .thumb-list__item--video, .thumb-list__item--premium')
     .each((_, element) => {
-      
+      if (metadataList.length >= 200) return false;
 
       const $e = $(element);
       const $a = $e.find('a').first();
