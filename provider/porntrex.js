@@ -305,57 +305,96 @@ if (configMatch) {
   // ✅ Use the new method  
   const hlsStreams = await this.getStreams({ videoPageUrl: hlsUrl });  
   streams = hlsStreams.streams;  
-}    
-  
-    // =========================  
-    // ✅ FALLBACK TO MP4  
-    // =========================  
-    // ✅ FALLBACK TO MP4 - only real resolutions
-// =========================
-// ✅ FALLBACK TO MP4 (SMART DETECTION)
-// =========================
-// =========================
-// 🔥 FALLBACK USING PLAYER CONFIG (BEST METHOD)
-// =========================
-if (!streams.length && playerConfig) {
+}
 
-  // ✅ DIRECT video_files (perfect case)
-  if (playerConfig.video_files) {
-    for (const [quality, url] of Object.entries(playerConfig.video_files)) {
-      if (!url) continue;
+// =========================
+// 🔥 PLAYER CONFIG STREAMS (PRIORITY)
+// =========================
+if (!streams.length && playerConfig?.video_files) {
+  let files = playerConfig.video_files;
 
-      const cleanUrl = url.startsWith('//') ? 'https:' + url : url;
+  // handle nested formats
+  if (files.mp4) files = files.mp4;
 
-      streams.push({
-        title: quality,
-        url: cleanUrl
-      });
+  // handle stringified JSON
+  if (typeof files === 'string') {
+    try {
+      files = JSON.parse(this.fixLooseJson(files));
+    } catch {
+      files = {};
     }
-
-    logger.debug(`Porntrex: ✅ extracted qualities from video_files`);
   }
 
-  // ✅ FALLBACK: generate from base video_url
-  else if (playerConfig.video_url) {
-    const base = playerConfig.video_url;
+  for (const [key, url] of Object.entries(files)) {
+    if (!url) continue;
+
+    const fixedUrl = url.startsWith("//") ? "https:" + url : url;
+    const qMatch = key.match(/(\d{3,4})/);
+
+    streams.push({
+      title: qMatch ? `${qMatch[1]}p` : key,
+      url: fixedUrl
+    });
+  }
+
+  if (streams.length) {
+    logger.debug(`Porntrex: playerConfig streams used`);
+  }
+}    
+// =========================
+// 🔥 XHR-LEVEL EXTRACTION (REAL METHOD)
+// =========================
+if (!streams.length) {
+
+  const match = videoUrl.match(/(\/get_file\/.*\/\d+)/i);
+
+  if (match) {
+    const basePath = match[1];
 
     const qualities = [2160, 1440, 1080, 720, 480, 360];
 
-    for (const q of qualities) {
-      const qUrl = base.replace(/_(\d{3,4})p\.mp4/i, `_${q}p.mp4`);
+    const found = [];
 
-      streams.push({
-        title: `${q}p`,
-        url: qUrl
-      });
+    const origin = new URL(videoUrl).origin;
+
+for (const q of qualities) {
+  const qUrl = `${origin}${basePath}_${q}p.mp4`;
+
+      try {
+        const res = await fetch(qUrl, {
+          method: 'GET',
+          headers: {
+            'Range': 'bytes=0-1', // 🔥 bypass HEAD blocking
+            'User-Agent': 'Mozilla/5.0',
+            'Referer': videoPageUrl,
+            'Origin': this.baseUrl
+          }
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+
+if ((res.status === 206 || res.ok) && contentType.includes('video')) {
+          found.push({
+            title: `${q}p`,
+            url: qUrl
+          });
+
+          logger.debug(`Porntrex: ✅ XHR found ${q}p`);
+        }
+      } catch {
+        logger.debug(`Porntrex: ❌ XHR missing ${q}p`);
+      }
     }
 
-    logger.debug(`Porntrex: ⚠️ generated qualities from video_url`);
+    // sort highest first
+    found.sort((a, b) => parseInt(b.title) - parseInt(a.title));
+
+    streams.push(...found);
   }
 }
 
 // =========================
-// 🛑 LAST RESORT FALLBACK
+// 🛑 FINAL FALLBACK
 // =========================
 if (!streams.length) {
   streams.push({ title: 'Auto', url: videoUrl });
