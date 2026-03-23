@@ -166,20 +166,20 @@ class PorntrexProvider extends Provider {
             background: poster  
           }  
         ),  
-        streams: streams.map(s => ({  
-          title: s.title,  
-          url: s.url,  
-          behaviorHints: {  
-            notWebReady: true,  
-            headers: {  
-              Referer: this.baseUrl,  
-              Origin: this.baseUrl,  
-              'User-Agent': 'Mozilla/5.0',
-              'Accept': '*/*',
-              'Range': 'bytes=0-' // 🔥 CRITICAL FIX
-            }  
-          }  
-        }))  
+        streams: streams.map(s => ({
+  title: s.title,
+  url: s.url,
+  behaviorHints: {
+    notWebReady: true
+  },
+  httpHeaders: {
+    Referer: this.baseUrl,
+    Origin: this.baseUrl,
+    'User-Agent': 'Mozilla/5.0',
+    'Accept': '*/*',
+    'Range': 'bytes=0-'
+  }
+})) 
       };  
 
       this.videoCache.set(id, { data: result, time: Date.now() });  
