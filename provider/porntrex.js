@@ -283,23 +283,34 @@ if (!height) continue; // skip invalid/fake resolutions
     // =========================  
     // ✅ FALLBACK TO MP4 - only real resolutions
 if (!streams.length) {
-  const base = videoUrl.replace(/\.mp4$/, '');
-  const qualities = [2160, 1080, 720];
+  const matches = embedHtml.match(/https?:\/\/[^\s"'<>]+_(\d{3,4})p\.mp4[^\s"'<>]*/g);
 
-  for (const q of qualities) {  
-  const qUrl = `${base}_${q}p.mp4`;  
-  try {  
-    const res = await fetch(qUrl, { method: 'HEAD', redirect: 'manual' });  
-    if (res.ok && res.headers.get('content-length') > 0) {  
-      streams.push({ title: `${q}p`, url: qUrl });  
-      break; // stop at the first valid resolution
-    }  
-  } catch {
-      logger.debug(`Porntrex: ${q}p MP4 fetch failed`);
+  if (matches && matches.length) {
+    const unique = new Map();
+
+    for (const url of matches) {
+      const qMatch = url.match(/_(\d{3,4})p/);
+      if (!qMatch) continue;
+
+      const q = qMatch[1];
+
+      // avoid duplicates
+      if (!unique.has(q)) {
+        unique.set(q, url);
+      }
     }
+
+    for (const [q, url] of unique) {
+      streams.push({
+        title: `${q}p`,
+        url
+      });
+    }
+
+    logger.debug(`Porntrex: MP4 qualities found → ${[...unique.keys()].join(', ')}`);
   }
 
-  // fallback to original MP4 if no higher res found
+  // final fallback
   if (!streams.length) {
     streams.push({ title: 'Auto', url: videoUrl });
   }
