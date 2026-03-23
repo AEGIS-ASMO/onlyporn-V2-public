@@ -275,30 +275,7 @@ async getStreams({ videoPageUrl }) {
   // ✅ Use the new method
   const hlsStreams = await this.getStreams({ videoPageUrl: hlsUrl });
   streams = hlsStreams.streams;
-}
-
-      try {
-        const hlsContent = await fetch(hlsUrl).then(r => r.text());
-        const parser = new (require('m3u8-parser').Parser)();
-        parser.push(hlsContent);
-        parser.end();
-
-        if (parser.manifest.playlists && parser.manifest.playlists.length) {
-          streams = parser.manifest.playlists.map(p => {
-            const height = p.attributes?.RESOLUTION?.height || 'auto';
-            const url = p.uri.startsWith('http') ? p.uri : new URL(p.uri, hlsUrl).href;
-            return { title: height + 'p', url };
-          });
-        } else {
-          // fallback to HLS main URL if no playlist
-          streams.push({ title: 'Auto', url: hlsUrl });
-        }
-
-        logger.debug(`Porntrex: HLS streams found for video ${id}`, streams.map(s => s.title));
-      } catch (e) {
-        logger.warn(`Porntrex: failed to parse HLS for video ${id}`, e);
-      }
-    }
+}  
 
     // =========================
     // ✅ FALLBACK TO MP4
