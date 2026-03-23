@@ -160,12 +160,10 @@ class XhamsterProvider extends Provider {
       pageUrl = `https://xhamster.com/api/video-category/${categorySlug}?page=${page}&perPage=40`;
 
       try {
-        const res = await fetchWithRetry(
-          (u) => super.fetchHtml(u, { headers: { 'User-Agent': 'Mozilla/5.0' } }),
-          pageUrl
-        );
-
-        const json = JSON.parse(res);
+        const res = await fetch(pageUrl, {
+  headers: { 'User-Agent': 'Mozilla/5.0' }
+});
+const json = await res.json();
 
         if (!json?.videos?.length) throw new Error('API empty, fallback to HTML');
 
@@ -183,6 +181,7 @@ class XhamsterProvider extends Provider {
             );
             globalSeen.add(v.pageURL);
           }
+if (allVideos.length >= this.limit) break;
         }
 
         page++;
@@ -269,7 +268,7 @@ metadataList.push(
 );
 
 seen.add(v.pageURL);
-if (metadataList.length >= 100) break;
+if (metadataList.length >= this.limit) break;
       
       }
     } catch (e) {
@@ -281,7 +280,7 @@ if (metadataList.length >= 100) break;
   const $ = load(html);
   $('.thumb-list__item, .video-thumb, .thumb-list__item--video, .thumb-list__item--premium')
     .each((_, element) => {
-      if (metadataList.length >= 200) return false;
+      if (metadataList.length >= this.limit) return false;
 
       const $e = $(element);
       const $a = $e.find('a').first();
