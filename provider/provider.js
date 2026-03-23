@@ -264,9 +264,14 @@ class Provider {
 
     const meta = await this.parseVideoPage({ id, html });
 
-    if (!meta) {
-      return { streams: [] };
-    }
+if (!meta) {
+  return { streams: [] };
+}
+
+// 🔥 USE CUSTOM STREAMS IF AVAILABLE
+if (meta.streams && meta.streams.length) {
+  return { streams: meta.streams };
+}
 
     if (meta.videoPageUrl && meta.videoPageUrl.includes('/embed/')) {
 
