@@ -321,9 +321,11 @@ async getStreams({ videoPageUrl }) {
       }
     }
 
+// MP4 fallback in parseVideoPage
 for (const s of streams) {
   if (/\.mp4$/i.test(s.url)) {
-    await this.logBitrate(s.url, s.title);
+    logger.info(`Porntrex: starting HEAD fetch for ${s.title}`);
+    await this.logBitrate(s.url, s.title); // ← await ensures log is seen
   }
 }
 
