@@ -3,7 +3,9 @@ const { load } = require('cheerio');
 const logger = require('../logger');  
 const { meta } = require('../model');  
 const Provider = require('./provider');  
-const htmlCache = new Map();  
+const htmlCache = new Map();
+const metaCache = new Map();
+const META_TTL = 1000 * 60 * 10;  
 const inFlight = new Map();  
 const HTML_TTL = 1000 * 60 * 5;  
   
@@ -34,7 +36,14 @@ async fetchHtml(url) {
       return cached.data;  
     }  
   
-    const html = await super.fetchHtml(url);  
+    const html = await super.fetchHtml(url, {
+  headers: {
+    'User-Agent': 'Mozilla/5.0',
+    'Referer': this.baseUrl,
+    'Origin': this.baseUrl,
+    'Accept-Language': 'en-US,en;q=0.9'
+  }
+});  
   
     htmlCache.set(url, {  
       data: html,  
@@ -148,108 +157,112 @@ async fetchHtml(url) {
   /* =========================  
      🔥 METADATA (mostly fine)  
   ========================= */  
-  async getMetadata(args) {  
-    logger.debug({ args }, 'getMetadata');  
-    const { id } = args;  
-    return this.fetchHtml(id).then((html) =>  
-      this.parseVideoPage({ id, html })  
-    );  
-  }  
+  async getMetadata(args) {
+  const { id } = args;
+
+  const cached = metaCache.get(id);
+  if (cached && Date.now() - cached.time < META_TTL) {
+    return cached.data;
+  }
+
+  const html = await this.fetchHtml(id);
+  const data = this.parseVideoPage({ id, html });
+
+  metaCache.set(id, {
+    data,
+    time: Date.now()
+  });
+
+  return data;
+} 
+getVideoUrl(html) {
+
+  const $ = load(html);
+
+  // ✅ 1. video tag
+  let src =
+    $('video source').attr('src') ||
+    $('video').attr('src');
+
+  if (src) {
+    if (src.startsWith('//')) return 'https:' + src;
+    if (src.startsWith('http')) return src;
+  }
+
+  // ✅ 2. m3u8
+  let m3u8 = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+  if (m3u8) return m3u8[0];
+
+  // ✅ 3. mp4
+  let mp4 = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/);
+  if (mp4) return mp4[0];
+
+  // ✅ 4. JS player fallback (IMPORTANT)
+  let js = html.match(/(?:file|src)\s*:\s*["'](https?:\/\/[^"']+)["']/);
+  if (js) return js[1];
+
+  return null;
+}
   
-  getvsrc(html) {  
-    const $ = load(html);  
+    
   
-    if ($('.vidsnfo').length) {  
-      const vidsnfo = $('.vidsnfo').data('vnfo');  
-  
-      for (const src of Object.values(vidsnfo)) {  
-        let tmp = src.split('/');  
-        tmp[1] += '8';  
-        tmp = this.preda(tmp);  
-        return tmp.join('/');  
-      }  
-    }  
-  
-    return null;  
-  }  
-  
-  preda(arg) {  
-    arg[5] -= parseInt(this.ssut51(arg[6])) + parseInt(this.ssut51(arg[7]));  
-    return arg;  
-  }  
-  
-  ssut51(arg) {  
-    const str = arg.replace(/[^0-9]/g, '');  
-    let sum = 0;  
-  
-    for (let i = 0; i < str.length; i++) {  
-      sum += parseInt(str.charAt(i), 10);  
-    }  
-  
-    return sum;  
-  }  
-  
-  parseVideoPage({ id, html }) {  
-    const $ = load(html);  
-  
-    const metaMap = {};  
-    $('meta').each((_, e) => {  
-      const a = e.attribs;  
-      metaMap[a.name || a.property] = a.content;  
-    });  
-  
-    let poster = metaMap['og:image'];  
-    if (poster && poster.startsWith('//')) {  
-      poster = 'https:' + poster;  
-    }  
-  
-    const description = metaMap['og:description'];  
-    const vidSrc = this.getvsrc(html);  
-  
-    let videoPageUrl = null;  
-  
-    if (vidSrc) {  
-  if (vidSrc.startsWith('//')) {  
-    videoPageUrl = 'https:' + vidSrc;  
-  } else if (vidSrc.startsWith('http')) {  
-    videoPageUrl = vidSrc;  
-  } else {  
-    videoPageUrl = this.baseUrl + vidSrc;  
-  }  
+  parseVideoPage({ id, html }) {
+  const $ = load(html);
+
+  const metaMap = {};
+  $('meta').each((_, e) => {
+    const a = e.attribs;
+    metaMap[a.name || a.property] = a.content;
+  });
+
+  let poster = metaMap['og:image'];
+  if (poster && poster.startsWith('//')) {
+    poster = 'https:' + poster;
+  }
+
+  const description = metaMap['og:description'];
+
+  const videoPageUrl = this.getVideoUrl(html);
+
+  if (!videoPageUrl) {
+    logger.warn('Sxyprn: No video URL extracted');
+  }
+
+  return new meta.MetaResponse(
+    id,
+    Provider.TYPE,
+    metaMap['og:title'],
+    {
+      description,
+      poster,
+      background: poster,
+      videoPageUrl,
+    }
+  );
 }  
-if (!videoPageUrl) {  
-  logger.warn('Sxyprn: No video URL extracted');  
+  
+  async getStreams(meta) {
+
+  if (!meta.videoPageUrl) {
+    logger.error('Sxyprn: stream missing');
+    return { streams: [] };
+  }
+
+  return {
+    streams: [
+      {
+        type: Provider.TYPE,
+        url: meta.videoPageUrl,
+        headers: {
+          Referer: this.baseUrl,
+          Origin: this.baseUrl,
+          'User-Agent': 'Mozilla/5.0'
+        },
+        name: 'Sxyprn HD',
+      },
+    ],
+  };
 }  
-  
-    return new meta.MetaResponse(  
-      id,  
-      Provider.TYPE,  
-      metaMap['og:title'],  
-      {  
-        description,  
-        poster,  
-        background: poster,  
-        videoPageUrl,  
-      }  
-    );  
-  }  
-  
-  async getStreams(meta) {  
-    return {  
-      streams: [  
-        {  
-          type: Provider.TYPE,  
-          url: meta.videoPageUrl,  
-headers: {  
-  Referer: this.baseUrl,  
-  Origin: this.baseUrl,  
-  'User-Agent': 'Mozilla/5.0'  
-},  
-          name: 'Sxyprn HD',  
-        },  
-      ],  
-    };  
-  }  
 }  
   
 module.exports = SxyprnProvider.create;
