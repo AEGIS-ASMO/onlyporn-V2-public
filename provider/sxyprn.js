@@ -3,6 +3,9 @@ const { load } = require('cheerio');
 const logger = require('../logger');
 const { meta } = require('../model');
 const Provider = require('./provider');
+const htmlCache = new Map();
+const inFlight = new Map();
+const HTML_TTL = 1000 * 60 * 5;
 
 const sortByMappings = {
   'Latest': 'latest',
@@ -21,6 +24,34 @@ class SxyprnProvider extends Provider {
   static create() {
     return new SxyprnProvider();
   }
+async fetchHtml(url) {
+  if (inFlight.has(url)) return inFlight.get(url);
+
+  const promise = (async () => {
+    const cached = htmlCache.get(url);
+
+    if (cached && Date.now() - cached.time < HTML_TTL) {
+      return cached.data;
+    }
+
+    const html = await super.fetchHtml(url);
+
+    htmlCache.set(url, {
+      data: html,
+      time: Date.now()
+    });
+
+    return html;
+  })();
+
+  inFlight.set(url, promise);
+
+  try {
+    return await promise;
+  } finally {
+    inFlight.delete(url);
+  }
+}
 
   /* =========================
      🔥 FIX 1: correct default catalog
@@ -178,8 +209,17 @@ class SxyprnProvider extends Provider {
     let videoPageUrl = null;
 
     if (vidSrc) {
-      videoPageUrl = this.baseUrl + vidSrc;
-    }
+  if (vidSrc.startsWith('//')) {
+    videoPageUrl = 'https:' + vidSrc;
+  } else if (vidSrc.startsWith('http')) {
+    videoPageUrl = vidSrc;
+  } else {
+    videoPageUrl = this.baseUrl + vidSrc;
+  }
+}
+if (!videoPageUrl) {
+  logger.warn('Sxyprn: No video URL extracted');
+}
 
     return new meta.MetaResponse(
       id,
@@ -200,6 +240,11 @@ class SxyprnProvider extends Provider {
         {
           type: Provider.TYPE,
           url: meta.videoPageUrl,
+headers: {
+  Referer: this.baseUrl,
+  Origin: this.baseUrl,
+  'User-Agent': 'Mozilla/5.0'
+},
           name: 'Sxyprn HD',
         },
       ],
