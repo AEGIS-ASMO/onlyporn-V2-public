@@ -36,14 +36,18 @@ async fetchHtml(url) {
       return cached.data;  
     }  
   
-    const html = await super.fetchHtml(url, {
+    const res = await fetch(url, {
   headers: {
-    'User-Agent': 'Mozilla/5.0',
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
     'Referer': this.baseUrl,
     'Origin': this.baseUrl,
-    'Accept-Language': 'en-US,en;q=0.9'
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept': 'text/html'
   }
-});  
+});
+
+const html = await res.text();  
   
     htmlCache.set(url, {  
       data: html,  
