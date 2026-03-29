@@ -4,6 +4,7 @@ const sortBy = [
   'Latest',
   'Trending',
   'Views',
+  'Rating',     
   'Orgasmic'
 ];
 
@@ -17,11 +18,9 @@ const genres = [
   'MILF',
   'German',
   'Asian',
-  'BigAss',
+  'Big-Ass',
   'Amateur',
-  'Cuckold',
-  'OldYoung',
-  'Solo'
+  'Cuckold'
 ];
 
 const options = []
