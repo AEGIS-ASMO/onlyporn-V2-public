@@ -44,7 +44,7 @@ const pathMappings = {
 class XhamsterProvider extends Provider {  
 
   constructor() {  
-    super('https://xhamster.com', 'xhamster', 60);  
+    super('https://xhamster.com', 'xhamster', 40);  
   }  
 
   static create() {  
@@ -320,15 +320,36 @@ logger.warn(`videos extracted (deep): ${videos.length}`);
           if (!v?.pageURL || !v?.title) continue;  
           if (seen.has(v.pageURL)) continue;  
 
-          metadataList.push(  
-            new meta.MetaPreview(  
-              v.pageURL,  
-              'movie',  
-              v.title,  
-              v.imageURL || v.thumbURL || v.poster || v.previewImageURL,  
-              { videoPageUrl: v.pageURL }  
-            )  
-          );  
+          let poster =
+  v.thumbURL ||
+  v.imageURL ||
+  v.poster ||
+  v.previewImageURL;
+
+// ❌ avoid slow preview thumbnails
+if (poster && poster.includes('preview')) {
+  poster = v.thumbURL || v.imageURL;
+}
+
+// ✅ fix relative URLs
+if (poster && !poster.startsWith('http')) {
+  poster = this.baseUrl + poster;
+}
+
+// ⚡ normalize format
+if (poster) {
+  poster = poster.replace(/\.webp(\?.*)?$/, '.jpg');
+}
+
+metadataList.push(
+  new meta.MetaPreview(
+    v.pageURL,
+    'movie',
+    v.title,
+    poster,
+    { videoPageUrl: v.pageURL }
+  )
+);  
 
           seen.add(v.pageURL);  
         }  
@@ -351,8 +372,29 @@ logger.warn(`videos extracted (deep): ${videos.length}`);
         seen.add(videoPageUrl);  
 
         const $img = $a.find('img').first();  
-        let poster = $img.attr('data-src') || $img.attr('data-original') || $img.attr('data-preview') || $img.attr('src');  
-        if (poster && !poster.startsWith('http')) poster = this.baseUrl + poster;  
+        let poster =
+  $img.attr('data-src') ||
+  $img.attr('data-original') ||
+  $img.attr('src') ||
+  $img.attr('data-preview');
+
+// ❌ avoid preview images
+if (poster && poster.includes('preview')) {
+  poster =
+    $img.attr('data-src') ||
+    $img.attr('data-original') ||
+    $img.attr('src');
+}
+
+// ✅ fix relative
+if (poster && !poster.startsWith('http')) {
+  poster = this.baseUrl + poster;
+}
+
+// ⚡ normalize
+if (poster) {
+  poster = poster.replace(/\.webp(\?.*)?$/, '.jpg');
+}  
 
         const title = $img.attr('alt') || $a.attr('title');  
         if (!title) return;  
