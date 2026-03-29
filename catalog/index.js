@@ -14,14 +14,12 @@ const catalogNames = [
   'spankbang',
   'xhamster',
   'eporner',
-  'porntrex',
   'xvideos',
 ];
 
 const catalogs = [
   ...epornerCatalogs,
   ...xhamsterCatalogs,
-  ...porntrexCatalogs,
   ...spankbangCatalogs,
   xvideosCatalog
 ];
