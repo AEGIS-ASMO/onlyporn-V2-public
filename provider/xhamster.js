@@ -136,45 +136,79 @@ class XhamsterProvider extends Provider {
   ========================= */  
   async fetchCatalog(baseUrl, genreName) {
 
-    const cacheKey = `${baseUrl}-${genreName}`;
-    const cached = catalogCache.get(cacheKey);
+  const cacheKey = `${baseUrl}-${genreName}`;
+  const cached = catalogCache.get(cacheKey);
 
-    if (cached && Date.now() - cached.time < CATALOG_TTL) {
-      return cached.data;
+  if (cached && Date.now() - cached.time < CATALOG_TTL) {
+    return cached.data;
+  }
+
+  const globalSeen = new Set();
+  let allVideos = [];
+
+  /* =========================
+     🔥 STEP 1: HTML FIRST (MAIN FIX)
+  ========================= */
+
+  try {
+    const html = await this.fetchHtml(baseUrl);
+    const htmlVideos = this.getCatalogMetas(html, globalSeen);
+
+    logger.warn(`HTML videos: ${htmlVideos.length}`);
+
+    allVideos.push(...htmlVideos);
+  } catch (err) {
+    logger.warn(`HTML fetch failed: ${err.message}`);
+  }
+
+  /* =========================
+     🔥 STEP 2: PAGINATE HTML
+  ========================= */
+
+  let page = 2;
+  const maxHtmlPages = 5;
+
+  while (allVideos.length < this.limit && page <= maxHtmlPages) {
+    try {
+      const pageUrl = `${baseUrl.replace(/\/$/, '')}/${page}/`;
+      const html = await this.fetchHtml(pageUrl);
+
+      const moreVideos = this.getCatalogMetas(html, globalSeen);
+
+      if (!moreVideos.length) break;
+
+      allVideos.push(...moreVideos);
+
+      logger.warn(`HTML page ${page}: ${moreVideos.length}`);
+
+      page++;
+    } catch (err) {
+      logger.warn(`HTML page ${page} failed`);
+      break;
     }
+  }
 
-    const globalSeen = new Set();
-    const allVideos = [];
+  /* =========================
+     ⚡ STEP 3: API BACKFILL (OPTIONAL)
+  ========================= */
+
+  if (allVideos.length < this.limit && genreName) {
 
     const categorySlug = genreName
-      ? genreName
-          .toLowerCase()
-          .replace(/\s+/g, '-')
-          .replace(/&/g, '')
-          .replace(/[^a-z0-9-]/g, '')
-      : null;
-
-    // ✅ fallback if no genre
-    if (!categorySlug) {
-      const html = await this.fetchHtml(baseUrl);
-      const data = this.getCatalogMetas(html);
-      catalogCache.set(cacheKey, { data, time: Date.now() });
-      return data;
-    }
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/&/g, '')
+      .replace(/[^a-z0-9-]/g, '');
 
     const size = 60;
-    const maxPages = 20;
-    const MAX_CONCURRENT = 3;
+    const MAX_CONCURRENT = 2;
 
-    for (let i = 0; i < maxPages; i += MAX_CONCURRENT) {
+    for (let i = 0; i < 5; i += MAX_CONCURRENT) {
 
       const batch = [];
 
       for (let j = 0; j < MAX_CONCURRENT; j++) {
-        const pageIndex = i + j;
-        if (pageIndex >= maxPages) break;
-
-        const offset = pageIndex * size;
+        const offset = (i + j) * size;
 
         const apiUrl = `https://xhamster.com/api/v4/videos?category=${categorySlug}&from=${offset}&size=${size}`;
 
@@ -183,7 +217,7 @@ class XhamsterProvider extends Provider {
             headers: {
               'User-Agent': 'Mozilla/5.0',
               'Accept': 'application/json',
-              'Referer': `${this.baseUrl}/categories/${categorySlug}`
+              'Referer': baseUrl
             }
           })
           .then(res => res.ok ? res.json() : null)
@@ -195,8 +229,6 @@ class XhamsterProvider extends Provider {
 
       for (const json of results) {
         const videos = json?.videos || [];
-
-        if (!videos.length) continue;
 
         for (const v of videos) {
           const url = v.url || v.pageURL;
@@ -218,23 +250,21 @@ class XhamsterProvider extends Provider {
 
           if (allVideos.length >= this.limit) break;
         }
-
-        // ✅ early stop if API exhausted
-        if (videos.length < size) break;
       }
 
       if (allVideos.length >= this.limit) break;
     }
+  }
 
-    const finalData = allVideos.slice(0, this.limit);
+  const finalData = allVideos.slice(0, this.limit);
 
-    catalogCache.set(cacheKey, {
-      data: finalData,
-      time: Date.now()
-    });
+  catalogCache.set(cacheKey, {
+    data: finalData,
+    time: Date.now()
+  });
 
-    return finalData;
-  }  
+  return finalData;
+}  
 
   /* unchanged below */
 
