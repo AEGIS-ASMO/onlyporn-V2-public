@@ -1,5 +1,4 @@
 const shuffle = require('fisher-yates');
-const porntrexCatalogs = require('./porntrex');
 const { spankbangCatalogs } = require('./spankbang');
 const xhamsterCatalogs = require('./xhamster');
 const { catalogs: epornerCatalogs } = require('./eporner');
