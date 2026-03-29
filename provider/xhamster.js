@@ -241,7 +241,7 @@ class XhamsterProvider extends Provider {
               url,
               'movie',
               v.title,
-              v.thumb || v.thumbURL,
+              v.thumbURL || v.thumb,
               { videoPageUrl: url }
             )
           );
@@ -326,12 +326,21 @@ logger.warn(`videos extracted (deep): ${videos.length}`);
   v.poster ||
   v.previewImageURL;
 
-// only fix relative URLs
 if (poster && !poster.startsWith('http')) {
   poster = this.baseUrl + poster;
-}  
+}
 
-          seen.add(v.pageURL);  
+metadataList.push(
+  new meta.MetaPreview(
+    v.pageURL,
+    'movie',
+    v.title,
+    poster,
+    { videoPageUrl: v.pageURL }
+  )
+);
+
+seen.add(v.pageURL);  
         }  
       } catch (e) {  
         logger.error('JSON parse failed', e);  
