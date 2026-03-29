@@ -302,7 +302,7 @@ logger.warn('HTML SAMPLE:', html.slice(0, 500));
 
 const videoPageUrl = this.getVideoUrl(html);
 
-logger.warn('FINAL EXTRACTED URL:', videoPageUrl);
+logger.warn(`FINAL EXTRACTED URL: ${videoPageUrl}`);
 logger.warn('==================================');
 
   return new meta.MetaResponse(
