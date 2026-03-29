@@ -326,30 +326,10 @@ logger.warn(`videos extracted (deep): ${videos.length}`);
   v.poster ||
   v.previewImageURL;
 
-// ❌ avoid slow preview thumbnails
-if (poster && poster.includes('preview')) {
-  poster = v.thumbURL || v.imageURL;
-}
-
-// ✅ fix relative URLs
+// only fix relative URLs
 if (poster && !poster.startsWith('http')) {
   poster = this.baseUrl + poster;
-}
-
-// ⚡ normalize format
-if (poster) {
-  poster = poster.replace(/\.webp(\?.*)?$/, '.jpg');
-}
-
-metadataList.push(
-  new meta.MetaPreview(
-    v.pageURL,
-    'movie',
-    v.title,
-    poster,
-    { videoPageUrl: v.pageURL }
-  )
-);  
+}  
 
           seen.add(v.pageURL);  
         }  
@@ -378,22 +358,8 @@ metadataList.push(
   $img.attr('src') ||
   $img.attr('data-preview');
 
-// ❌ avoid preview images
-if (poster && poster.includes('preview')) {
-  poster =
-    $img.attr('data-src') ||
-    $img.attr('data-original') ||
-    $img.attr('src');
-}
-
-// ✅ fix relative
 if (poster && !poster.startsWith('http')) {
   poster = this.baseUrl + poster;
-}
-
-// ⚡ normalize
-if (poster) {
-  poster = poster.replace(/\.webp(\?.*)?$/, '.jpg');
 }  
 
         const title = $img.attr('alt') || $a.attr('title');  
