@@ -223,11 +223,19 @@ ssut51(arg) {
  
 getVideoUrl(html) {
 
+  logger.warn('Trying to extract video...');
+
   const $ = load(html);
 
-  // ✅ 1. vidsnfo (PRIMARY for sxyprn)
+  // 🔍 check vidsnfo presence
+  logger.warn('vidsnfo exists:', $('.vidsnfo').length);
+
+  // ✅ 1. vidsnfo
   const vnfo = this.getvsrc(html);
-  if (vnfo) return vnfo;
+  if (vnfo) {
+    logger.warn('VIDSNFO URL FOUND:', vnfo);
+    return vnfo;
+  }
 
   // ✅ 2. video tag
   let src =
@@ -235,24 +243,34 @@ getVideoUrl(html) {
     $('video').attr('src');
 
   if (src) {
+    logger.warn('VIDEO TAG FOUND:', src);
+
     if (src.startsWith('//')) return 'https:' + src;
     if (src.startsWith('http')) return src;
   }
 
   // ✅ 3. mp4
   let mp4 = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/);
-  if (mp4) return mp4[0];
+  if (mp4) {
+    logger.warn('MP4 FOUND:', mp4[0]);
+    return mp4[0];
+  }
 
   // ✅ 4. m3u8
   let m3u8 = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
-  if (m3u8) return m3u8[0];
+  if (m3u8) {
+    logger.warn('M3U8 FOUND:', m3u8[0]);
+    return m3u8[0];
+  }
 
-  
+  // 🔍 5. packed JS detection
+  let packed = html.match(/eval\(function\(p,a,c,k,e,d\).*?\)\)/s);
+  if (packed) {
+    logger.warn('PACKED JS FOUND (OBFUSCATED)');
+  }
 
-  // ✅ 5. JS fallback
-  let js = html.match(/(?:file|src)\s*:\s*["'](https?:\/\/[^"']+)["']/);
-  if (js) return js[1];
-
+  // ❌ nothing found
+  logger.warn('NO VIDEO URL FOUND');
   return null;
 }
   
@@ -274,9 +292,14 @@ getVideoUrl(html) {
 
   const description = metaMap['og:description'];
 
-  const videoPageUrl = this.getVideoUrl(html);
+  logger.warn('========== SXYPRN DEBUG ==========');
+logger.warn('HTML LENGTH:', html.length);
+logger.warn('HTML SAMPLE:', html.slice(0, 500));
 
-  logger.warn(`Sxyprn extracted URL: ${videoPageUrl}`);
+const videoPageUrl = this.getVideoUrl(html);
+
+logger.warn('FINAL EXTRACTED URL:', videoPageUrl);
+logger.warn('==================================');
 
   return new meta.MetaResponse(
     id,
