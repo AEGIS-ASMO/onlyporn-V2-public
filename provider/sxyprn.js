@@ -232,7 +232,7 @@ getVideoUrl(html) {
   const $ = load(html);
 
   // 🔍 check vidsnfo presence
-  logger.warn('vidsnfo exists:', $('.vidsnfo').length);
+  logger.warn(`vidsnfo exists: ${$('.vidsnfo').length}`);
 
   // ✅ 1. vidsnfo
   const vnfo = this.getvsrc(html);
@@ -297,7 +297,7 @@ getVideoUrl(html) {
   const description = metaMap['og:description'];
 
   logger.warn('========== SXYPRN DEBUG ==========');
-logger.warn('HTML LENGTH:', html.length);
+logger.warn(`HTML LENGTH: ${html.length}`);
 logger.warn('HTML SAMPLE:', html.slice(0, 500));
 
 const videoPageUrl = this.getVideoUrl(html);
