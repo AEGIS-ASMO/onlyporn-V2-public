@@ -278,32 +278,43 @@ class XhamsterProvider extends Provider {
     if (match) {  
       try {  
         const json = JSON.parse(match[1]);  
-        const videos = [];  
+        const videos = [];
 
-        if (json?.layoutPage?.videoListProps?.videoThumbProps) {  
-          videos.push(...json.layoutPage.videoListProps.videoThumbProps);  
-        }  
+/* =========================
+   🔥 RECURSIVE JSON SCAN
+========================= */
 
-        let rails = [];  
+function extractVideos(obj) {
+  if (!obj || typeof obj !== 'object') return;
 
-        if (Array.isArray(json?.layoutPage?.sections)) {  
-          rails = json.layoutPage.sections;  
-        } else if (json?.layoutPage?.content) {  
-          rails = Object.values(json.layoutPage.content);  
-        }  
+  // ✅ detect video arrays
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      extractVideos(item);
+    }
+    return;
+  }
 
-        for (const section of rails) {  
-          if (!section || typeof section !== 'object') continue;  
+  // 🔥 KEY DETECTION (CRITICAL)
+  if (
+    obj.pageURL &&
+    obj.title &&
+    (obj.imageURL || obj.thumbURL || obj.previewImageURL)
+  ) {
+    videos.push(obj);
+  }
 
-          const items =  
-            section.videoListProps?.videoThumbProps ||  
-            section.videoThumbProps ||  
-            section.videos;  
+  // traverse deeper
+  for (const key in obj) {
+    extractVideos(obj[key]);
+  }
+}
 
-          if (Array.isArray(items)) {  
-            videos.push(...items);  
-          }  
-        }  
+extractVideos(json);
+
+logger.warn(`videos extracted (deep): ${videos.length}`);  
+
+          
 
         for (const v of videos) {  
           if (!v?.pageURL || !v?.title) continue;  
