@@ -239,13 +239,15 @@ getVideoUrl(html) {
     if (src.startsWith('http')) return src;
   }
 
-  // ✅ 3. m3u8
+  // ✅ 3. mp4
+  let mp4 = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/);
+  if (mp4) return mp4[0];
+
+  // ✅ 4. m3u8
   let m3u8 = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
   if (m3u8) return m3u8[0];
 
-  // ✅ 4. mp4
-  let mp4 = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/);
-  if (mp4) return mp4[0];
+  
 
   // ✅ 5. JS fallback
   let js = html.match(/(?:file|src)\s*:\s*["'](https?:\/\/[^"']+)["']/);
@@ -302,10 +304,13 @@ getVideoUrl(html) {
         type: Provider.TYPE,
         url: meta.videoPageUrl,
         headers: {
-          Referer: this.baseUrl,
-          Origin: this.baseUrl,
-          'User-Agent': 'Mozilla/5.0'
-        },
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+  'Referer': meta.id, // 🔥 VERY IMPORTANT (video page URL, not homepage)
+  'Origin': this.baseUrl,
+  'Accept': '*/*',
+  'Connection': 'keep-alive'
+},
         name: 'Sxyprn HD',
       },
     ],
