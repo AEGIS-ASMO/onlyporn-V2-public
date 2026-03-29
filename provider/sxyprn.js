@@ -174,12 +174,62 @@ async fetchHtml(url) {
   });
 
   return data;
-} 
+}
+getvsrc(html) {
+  const $ = load(html);
+
+  const el = $('.vidsnfo');
+  if (!el.length) return null;
+
+  const vidsnfo = el.data('vnfo');
+  if (!vidsnfo) return null;
+
+  for (const src of Object.values(vidsnfo)) {
+    let tmp = src.split('/');
+
+    if (!tmp || tmp.length < 8) continue;
+
+    tmp[1] += '8';
+    tmp = this.preda(tmp);
+
+    const final = tmp.join('/');
+
+    if (final.startsWith('//')) return 'https:' + final;
+    if (final.startsWith('http')) return final;
+
+    if (final.startsWith('/')) {
+  return this.baseUrl + final;
+}
+return 'https://' + final;
+  }
+
+  return null;
+}
+preda(arg) {
+  arg[5] -= parseInt(this.ssut51(arg[6])) + parseInt(this.ssut51(arg[7]));
+  return arg;
+}
+
+ssut51(arg) {
+  const str = arg.replace(/[^0-9]/g, '');
+  let sum = 0;
+
+  for (let i = 0; i < str.length; i++) {
+    sum += parseInt(str.charAt(i), 10);
+  }
+
+  return sum;
+}
+ 
 getVideoUrl(html) {
 
   const $ = load(html);
 
-  // ✅ 1. video tag
+  // ✅ 1. vidsnfo (PRIMARY for sxyprn)
+  const vnfo = this.getvsrc(html);
+  if (vnfo) return vnfo;
+
+  // ✅ 2. video tag
   let src =
     $('video source').attr('src') ||
     $('video').attr('src');
@@ -189,15 +239,15 @@ getVideoUrl(html) {
     if (src.startsWith('http')) return src;
   }
 
-  // ✅ 2. m3u8
+  // ✅ 3. m3u8
   let m3u8 = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
   if (m3u8) return m3u8[0];
 
-  // ✅ 3. mp4
+  // ✅ 4. mp4
   let mp4 = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/);
   if (mp4) return mp4[0];
 
-  // ✅ 4. JS player fallback (IMPORTANT)
+  // ✅ 5. JS fallback
   let js = html.match(/(?:file|src)\s*:\s*["'](https?:\/\/[^"']+)["']/);
   if (js) return js[1];
 
@@ -224,9 +274,7 @@ getVideoUrl(html) {
 
   const videoPageUrl = this.getVideoUrl(html);
 
-  if (!videoPageUrl) {
-    logger.warn('Sxyprn: No video URL extracted');
-  }
+  logger.warn(`Sxyprn extracted URL: ${videoPageUrl}`);
 
   return new meta.MetaResponse(
     id,
