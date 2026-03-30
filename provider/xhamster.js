@@ -466,6 +466,8 @@ if (streamUrl && streamUrl.startsWith('//')) {
 // safety cleanup
 if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');
 
+const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
+
 if (!streamUrl) logger.warn("xHamster: no stream URL found");  
 
     return new meta.MetaResponse(  
