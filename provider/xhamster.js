@@ -402,36 +402,7 @@ if (poster && !poster.startsWith('http')) {
 
     metaCache.set(id, { data, time: Date.now() });  
     return data;  
-  }
-async getStreams(args) {
-  let { id } = args;
-
-  if (!id.startsWith('http')) {
-    id = this.baseUrl + id;
-  }
-
-  const html = await this.fetchHtml(id);
-  const data = this.parseVideoPage({ id, html });
-
-  const streamUrl = data?.streamUrl;
-
-  if (!streamUrl) return [];
-
-  return [
-    {
-      url: streamUrl,
-      title: data?.title || 'Play',
-      headers: {
-        Referer: 'https://xhamster.com/',
-        Origin: 'https://xhamster.com',
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': '*/*',
-        'Connection': 'keep-alive',
-      },
-    },
-  ];
-}  
+  }  
 
   parseVideoPage({ id, html }) {  
     let match = html.match(/window\.initials\s*=\s*(\{.*?\});/) || html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/);  
@@ -455,63 +426,32 @@ async getStreams(args) {
     const poster = json?.videoModel?.thumbURL;  
 
     let streamUrl = null;  
-const sources = json?.xplayerSettings?.sources || {};  
+    const sources = json?.xplayerSettings?.sources || {};  
 
-// 🔥 NEW: standard.h264 (THIS FIXES YOUR BUG)
-if (sources?.standard?.h264?.length) {
-  const best =
-    sources.standard.h264.find(v => v.quality === '1080p') ||
-    sources.standard.h264.find(v => v.quality === '720p') ||
-    sources.standard.h264[0];
+    if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;  
+    else if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;  
+    else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;  
+    else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;  
 
-  if (best?.url) streamUrl = best.url;
-}
+    if (streamUrl && !streamUrl.startsWith('http')) streamUrl = null;  
+    if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');  
 
-// existing logic
-else if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;  
-else if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;  
-else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;  
-else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;  
+    const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];  
 
-// 🔥 NEW: direct hls
-else if (sources?.hls?.url) streamUrl = sources.hls.url;  
-else if (sources?.hls?.src) streamUrl = sources.hls.src;  
+    if (!streamUrl) logger.warn("xHamster: no stream URL found");  
 
-// 🔥 NEW: streams array fallback
-else if (json?.streams?.length) {
-  const best =
-    json.streams.find(s => s.resolution === '2160p') ||
-    json.streams.find(s => s.resolution === '1080p') ||
-    json.streams[0];
-
-  if (best?.url) streamUrl = best.url;
-}
-
-// normalize protocol
-if (streamUrl && streamUrl.startsWith('//')) {
-  streamUrl = 'https:' + streamUrl;
-}
-
-// safety cleanup
-if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');
-
-const tags = json?.videoTagsListProps?.tags?.map(t => t.name) || [];
-
-if (!streamUrl) logger.warn("xHamster: no stream URL found");  
-
-    return new meta.MetaResponse(
-  id,
-  Provider.TYPE,
-  title,
-  {
-    videoPageUrl: id,
-    description,
-    poster,
-    background: poster,
-    genres: tags,
-    streamUrl, // 🔥 ADD THIS
-  },
-);  
+    return new meta.MetaResponse(  
+      id,  
+      Provider.TYPE,  
+      title,  
+      {  
+        videoPageUrl: streamUrl,  
+        description,  
+        poster,  
+        background: poster,  
+        genres: tags,  
+      },  
+    );  
   }  
 
   transformStream(url, stream) {  
