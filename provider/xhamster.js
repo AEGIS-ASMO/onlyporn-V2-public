@@ -231,10 +231,7 @@ class XhamsterProvider extends Provider {
         const videos = json?.videos || [];
 
         for (const v of videos) {
-logger.warn('🔗 FOUND VIDEO (JSON):', {
-  url: v.pageURL,
-  title: v.title
-});
+
           const url = v.url || v.pageURL;
 
           if (!url || !v.title) continue;
