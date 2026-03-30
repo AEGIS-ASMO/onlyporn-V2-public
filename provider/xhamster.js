@@ -405,8 +405,13 @@ if (poster && !poster.startsWith('http')) {
   }  
 
   parseVideoPage({ id, html }) {  
-    let match = html.match(/window\.initials\s*=\s*(\{.*?\});/) || html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/);  
-    if (!match) return {};  
+    let match =
+  html.match(/window\.initials\s*=\s*(\{.*?\});/s) ||
+  html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/) ||
+  html.match(/__INITIAL_STATE__\s*=\s*(\{.*?\});/s);  
+    if (!match) return {};
+logger.warn('xHamster: No JSON match found in page');
+logger.warn(`HTML snippet: ${html.slice(0, 1000)}`);  
 
     let json;  
     try {  
@@ -431,20 +436,30 @@ logger.warn('===== xHamster JSON DEBUG END =====');
     const description = json?.videoModel?.description || title;  
     const poster = json?.videoModel?.thumbURL;  
 
-    let streamUrl = null;  
-    const sources = json?.xplayerSettings?.sources || {};  
+    let streamUrl = null;
 
-    if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;  
-    else if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;  
-    else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;  
-    else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;  
+const sources =
+  json?.xplayerSettings?.sources ||
+  json?.player?.sources ||
+  json?.videoEntity?.sources ||
+  {};
+
+if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;
+else if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;
+else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;
+else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;
+else if (sources?.hls?.url) streamUrl = sources.hls.url;
+else if (sources?.hls?.src) streamUrl = sources.hls.src;  
 
     if (streamUrl && !streamUrl.startsWith('http')) streamUrl = null;  
     if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');  
 
     const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];  
 
-    if (!streamUrl) logger.warn("xHamster: no stream URL found");  
+    if (!streamUrl) {
+  logger.warn('xHamster: stream extraction failed');
+  logger.warn(JSON.stringify(sources, null, 2).slice(0, 1000));
+}  
 
     return new meta.MetaResponse(  
       id,  
