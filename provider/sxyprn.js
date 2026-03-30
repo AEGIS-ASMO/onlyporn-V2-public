@@ -232,56 +232,32 @@ ssut51(arg) {
 }
  
 getVideoUrl(html) {
-
-  logger.warn('Trying to extract video...');
-
   const $ = load(html);
 
-  // 🔍 check vidsnfo presence
-  logger.warn(`vidsnfo exists: ${$('.vidsnfo').length}`);
+  logger.warn('Extracting EXTERNAL video links...');
 
-  // ✅ 1. vidsnfo
-  const vnfo = this.getvsrc(html);
-  if (vnfo) {
-    logger.warn('VIDSNFO URL FOUND:', vnfo);
-    return vnfo;
-  }
+  const links = [];
 
-  // ✅ 2. video tag
-  let src =
-    $('video source').attr('src') ||
-    $('video').attr('src');
+  $('a').each((_, el) => {
+    const href = $(el).attr('href');
+    if (!href) return;
 
-  if (src) {
-    logger.warn('VIDEO TAG FOUND:', src);
+    // 🔥 target known external hosts
+    if (
+      href.includes('myvidplay.com') ||
+      href.includes('vidara.so') ||
+      href.includes('filemoon') ||
+      href.includes('streamwish') ||
+      href.includes('dood') ||
+      href.includes('mixdrop')
+    ) {
+      links.push(href);
+    }
+  });
 
-    if (src.startsWith('//')) return 'https:' + src;
-    if (src.startsWith('http')) return src;
-  }
+  logger.warn(`External links found: ${links.length}`);
 
-  // ✅ 3. mp4
-  let mp4 = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/);
-  if (mp4) {
-    logger.warn('MP4 FOUND:', mp4[0]);
-    return mp4[0];
-  }
-
-  // ✅ 4. m3u8
-  let m3u8 = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
-  if (m3u8) {
-    logger.warn('M3U8 FOUND:', m3u8[0]);
-    return m3u8[0];
-  }
-
-  // 🔍 5. packed JS detection
-  let packed = html.match(/eval\(function\(p,a,c,k,e,d\).*?\)\)/s);
-  if (packed) {
-    logger.warn('PACKED JS FOUND (OBFUSCATED)');
-  }
-
-  // ❌ nothing found
-  logger.warn('NO VIDEO URL FOUND');
-  return null;
+  return links.length ? links : null;
 }
   
     
@@ -306,48 +282,98 @@ getVideoUrl(html) {
 logger.warn(`HTML LENGTH: ${html.length}`);
 logger.warn('HTML SAMPLE:', html.slice(0, 500));
 
-const videoPageUrl = this.getVideoUrl(html);
+const externalLinks = this.getVideoUrl(html);
 
-logger.warn(`FINAL EXTRACTED URL: ${videoPageUrl}`);
+logger.warn(`External links: ${JSON.stringify(externalLinks)}`);
 logger.warn('==================================');
 
   return new meta.MetaResponse(
-    id,
-    Provider.TYPE,
-    metaMap['og:title'],
-    {
-      description,
-      poster,
-      background: poster,
-      videoPageUrl,
-    }
-  );
+  id,
+  Provider.TYPE,
+  metaMap['og:title'],
+  {
+    description,
+    poster,
+    background: poster,
+    externalLinks, // 🔥 store ALL links
+  }
+);
 }  
   
-  async getStreams(meta) {
+  async resolveExternalStream(link) {
+  try {
+    logger.warn(`Resolving external: ${link}`);
 
-  if (!meta.videoPageUrl) {
-    logger.error('Sxyprn: stream missing');
+    const res = await fetch(link, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+        'Referer': this.baseUrl,
+      }
+    });
+
+    const html = await res.text();
+
+    // 🔥 1. direct mp4
+    let mp4 = html.match(/https?:\/\/[^"' ]+\.mp4[^"' ]*/);
+    if (mp4) {
+      logger.warn(`MP4 FOUND: ${mp4[0]}`);
+      return mp4[0];
+    }
+
+    // 🔥 2. m3u8 (HLS)
+    let m3u8 = html.match(/https?:\/\/[^"' ]+\.m3u8[^"' ]*/);
+    if (m3u8) {
+      logger.warn(`M3U8 FOUND: ${m3u8[0]}`);
+      return m3u8[0];
+    }
+
+    // 🔥 3. source tag fallback
+    const $ = load(html);
+    let src =
+      $('video source').attr('src') ||
+      $('video').attr('src');
+
+    if (src) {
+      if (src.startsWith('//')) return 'https:' + src;
+      if (src.startsWith('http')) return src;
+    }
+
+    logger.warn('No playable stream found on external host');
+    return null;
+
+  } catch (err) {
+    logger.error(`Resolve failed: ${err.message}`);
+    return null;
+  }
+}
+
+async getStreams(meta) {
+  if (!meta.externalLinks || !meta.externalLinks.length) {
+    logger.error('Sxyprn: no external links');
     return { streams: [] };
   }
 
-  return {
-    streams: [
-      {
+  const streams = [];
+
+  for (const link of meta.externalLinks) {
+    const resolved = await this.resolveExternalStream(link);
+
+    if (resolved) {
+      streams.push({
         type: Provider.TYPE,
-        url: meta.videoPageUrl,
+        url: resolved,
+        name: 'Sxyprn External',
         headers: {
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-  'Referer': meta.id, // 🔥 VERY IMPORTANT (video page URL, not homepage)
-  'Origin': this.baseUrl,
-  'Accept': '*/*',
-  'Connection': 'keep-alive'
-},
-        name: 'Sxyprn HD',
-      },
-    ],
-  };
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+          'Referer': link
+        }
+      });
+    }
+  }
+
+  return { streams };
 }  
 }  
   
