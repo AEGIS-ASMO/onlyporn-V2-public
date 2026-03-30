@@ -231,6 +231,10 @@ class XhamsterProvider extends Provider {
         const videos = json?.videos || [];
 
         for (const v of videos) {
+logger.warn('🔗 FOUND VIDEO (JSON):', {
+  url: v.pageURL,
+  title: v.title
+});
           const url = v.url || v.pageURL;
 
           if (!url || !v.title) continue;
@@ -255,6 +259,8 @@ class XhamsterProvider extends Provider {
       if (allVideos.length >= this.limit) break;
     }
   }
+logger.warn('📦 FINAL CATALOG SIZE:', finalData.length);
+logger.warn('📦 SAMPLE VIDEO URL:', finalData[0]?.props?.videoPageUrl || finalData[0]?.id);
 
   const finalData = allVideos.slice(0, this.limit);
 
@@ -353,7 +359,8 @@ seen.add(v.pageURL);
 
         const $e = $(element);  
         const $a = $e.find('a').first();  
-        let videoPageUrl = $a.attr('href');  
+        let videoPageUrl = $a.attr('href');
+logger.warn('🔗 FOUND VIDEO (HTML):', videoPageUrl);  
         if (!videoPageUrl) return;  
         if (videoPageUrl.includes('/ff/out') || videoPageUrl.includes('/moments/')) return;  
         if (!videoPageUrl.startsWith('http')) videoPageUrl = this.baseUrl + videoPageUrl;  
@@ -395,23 +402,29 @@ if (poster && !poster.startsWith('http')) {
     if (!id.startsWith('http')) id = this.baseUrl + id;  
 
     const cached = metaCache.get(id);  
-    if (cached && Date.now() - cached.time < META_TTL) return cached.data;  
+    if (cached && Date.now() - cached.time < META_TTL) return cached.data;
 
-    const html = await this.fetchHtml(id);  
+logger.warn('🎬 FETCHING VIDEO PAGE:', id);  
+    const html = await this.fetchHtml(id);
+logger.warn('📄 VIDEO HTML LENGTH:', html?.length);  
     const data = this.parseVideoPage({ id, html });  
 
     metaCache.set(id, { data, time: Date.now() });  
     return data;  
   }  
 
-  parseVideoPage({ id, html }) {  
-    let match = html.match(/window\.initials\s*=\s*(\{.*?\});/) || html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/);  
+  parseVideoPage({ id, html }) {
+logger.warn('🧪 PARSING VIDEO PAGE:', id);  
+    let match = html.match(/window\.initials\s*=\s*(\{.*?\});/) || html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/);
+logger.warn('🧾 INITIALS FOUND:', !!match);  
     if (!match) return {};  
 
     let json;  
     try {  
       if (match[1].startsWith('{')) {  
-        json = JSON.parse(match[1]);  
+        json = JSON.parse(match[1]);
+logger.warn('✅ JSON PARSED SUCCESSFULLY');
+logger.warn('🔑 SOURCES KEYS:', Object.keys(json?.xplayerSettings?.sources || {}));  
       } else {  
         const decoded = match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');  
         json = JSON.parse(decoded);  
@@ -428,15 +441,32 @@ if (poster && !poster.startsWith('http')) {
     let streamUrl = null;  
     const sources = json?.xplayerSettings?.sources || {};  
 
-    if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;  
-    else if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;  
-    else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;  
-    else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;  
+    if (sources?.hls?.av1?.url) {
+  logger.warn('🎥 STREAM: hls.av1');
+  streamUrl = sources.hls.av1.url;
+}
+else if (sources?.hls?.h264?.url) {
+  logger.warn('🎥 STREAM: hls.h264');
+  streamUrl = sources.hls.h264.url;
+}
+else if (sources?.mp4?.high?.url) {
+  logger.warn('🎥 STREAM: mp4.high');
+  streamUrl = sources.mp4.high.url;
+}
+else if (sources?.mp4?.medium?.url) {
+  logger.warn('🎥 STREAM: mp4.medium');
+  streamUrl = sources.mp4.medium.url;
+}
+else {
+  logger.warn('❌ NO STREAM FOUND IN SOURCES');
+}  
 
     if (streamUrl && !streamUrl.startsWith('http')) streamUrl = null;  
     if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');  
 
-    const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];  
+    const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
+
+logger.warn('🎬 FINAL STREAM URL:', streamUrl);  
 
     if (!streamUrl) logger.warn("xHamster: no stream URL found");  
 
