@@ -402,7 +402,36 @@ if (poster && !poster.startsWith('http')) {
 
     metaCache.set(id, { data, time: Date.now() });  
     return data;  
-  }  
+  }
+async getStreams(args) {
+  let { id } = args;
+
+  if (!id.startsWith('http')) {
+    id = this.baseUrl + id;
+  }
+
+  const html = await this.fetchHtml(id);
+  const data = this.parseVideoPage({ id, html });
+
+  const streamUrl = data?.streamUrl;
+
+  if (!streamUrl) return [];
+
+  return [
+    {
+      url: streamUrl,
+      title: data?.title || 'Play',
+      headers: {
+        Referer: 'https://xhamster.com/',
+        Origin: 'https://xhamster.com',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': '*/*',
+        'Connection': 'keep-alive',
+      },
+    },
+  ];
+}  
 
   parseVideoPage({ id, html }) {  
     let match = html.match(/window\.initials\s*=\s*(\{.*?\});/) || html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/);  
@@ -466,22 +495,23 @@ if (streamUrl && streamUrl.startsWith('//')) {
 // safety cleanup
 if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');
 
-const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];
+const tags = json?.videoTagsListProps?.tags?.map(t => t.name) || [];
 
 if (!streamUrl) logger.warn("xHamster: no stream URL found");  
 
-    return new meta.MetaResponse(  
-      id,  
-      Provider.TYPE,  
-      title,  
-      {  
-        videoPageUrl: id,  
-        description,  
-        poster,  
-        background: poster,  
-        genres: tags,  
-      },  
-    );  
+    return new meta.MetaResponse(
+  id,
+  Provider.TYPE,
+  title,
+  {
+    videoPageUrl: id,
+    description,
+    poster,
+    background: poster,
+    genres: tags,
+    streamUrl, // 🔥 ADD THIS
+  },
+);  
   }  
 
   transformStream(url, stream) {  
