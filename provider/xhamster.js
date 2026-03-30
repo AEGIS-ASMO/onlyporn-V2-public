@@ -419,7 +419,13 @@ if (poster && !poster.startsWith('http')) {
     } catch (err) {  
       logger.error(err);  
       return {};  
-    }  
+    }
+logger.warn('===== xHamster JSON DEBUG START =====');
+logger.warn(`Video URL: ${id}`);
+logger.warn(`Has xplayerSettings: ${!!json?.xplayerSettings}`);
+logger.warn(`Sources keys: ${Object.keys(json?.xplayerSettings?.sources || {})}`);
+logger.warn(`Full JSON (partial): ${JSON.stringify(json).slice(0, 2000)}`);
+logger.warn('===== xHamster JSON DEBUG END =====');  
 
     const title = json?.videoEntity?.title || json?.videoModel?.title;  
     const description = json?.videoModel?.description || title;  
