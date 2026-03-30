@@ -475,7 +475,7 @@ if (!streamUrl) logger.warn("xHamster: no stream URL found");
       Provider.TYPE,  
       title,  
       {  
-        videoPageUrl: streamUrl,  
+        videoPageUrl: id,  
         description,  
         poster,  
         background: poster,  
