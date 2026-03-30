@@ -198,13 +198,19 @@ getvsrc(html) {
 
     const final = tmp.join('/');
 
-    if (final.startsWith('//')) return 'https:' + final;
-    if (final.startsWith('http')) return final;
+// 🔥 CONVERT .vid → .mp4 HERE
+let url = final.replace('.vid', '.mp4');
 
-    if (final.startsWith('/')) {
-  return this.baseUrl + final;
+logger.warn(`Converted video URL: ${url}`);
+
+if (url.startsWith('//')) return 'https:' + url;
+if (url.startsWith('http')) return url;
+
+if (url.startsWith('/')) {
+  return this.baseUrl + url;
 }
-return 'https://' + final;
+
+return 'https://' + url;
   }
 
   return null;
