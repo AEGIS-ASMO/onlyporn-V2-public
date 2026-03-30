@@ -405,13 +405,8 @@ if (poster && !poster.startsWith('http')) {
   }  
 
   parseVideoPage({ id, html }) {  
-    let match =
-  html.match(/window\.initials\s*=\s*(\{.*?\});/s) ||
-  html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/) ||
-  html.match(/__INITIAL_STATE__\s*=\s*(\{.*?\});/s);  
-    if (!match) return {};
-logger.warn('xHamster: No JSON match found in page');
-logger.warn(`HTML snippet: ${html.slice(0, 1000)}`);  
+    let match = html.match(/window\.initials\s*=\s*(\{.*?\});/) || html.match(/window\.initials\s*=\s*JSON\.parse\("(.+?)"\)/);  
+    if (!match) return {};  
 
     let json;  
     try {  
@@ -424,37 +419,36 @@ logger.warn(`HTML snippet: ${html.slice(0, 1000)}`);
     } catch (err) {  
       logger.error(err);  
       return {};  
-    }
-logger.warn('===== xHamster JSON DEBUG START =====');
-logger.warn(`Video URL: ${id}`);
-logger.warn(`Has xplayerSettings: ${!!json?.xplayerSettings}`);
-logger.warn(`Sources keys: ${Object.keys(json?.xplayerSettings?.sources || {})}`);
-logger.warn(`Full JSON (partial): ${JSON.stringify(json).slice(0, 2000)}`);
-logger.warn('===== xHamster JSON DEBUG END =====');  
+    }  
 
     const title = json?.videoEntity?.title || json?.videoModel?.title;  
     const description = json?.videoModel?.description || title;  
     const poster = json?.videoModel?.thumbURL;  
 
-    let streamUrl = null;
+    let streamUrl = null;  
+const sources = json?.xplayerSettings?.sources || {};  
 
-const sources =
-  json?.xplayerSettings?.sources ||
-  json?.player?.sources ||
-  json?.videoEntity?.sources ||
-  {};
+// 🔥 NEW: standard.h264 (THIS FIXES YOUR BUG)
+if (sources?.standard?.h264?.length) {
+  const best =
+    sources.standard.h264.find(v => v.quality === '1080p') ||
+    sources.standard.h264.find(v => v.quality === '720p') ||
+    sources.standard.h264[0];
 
-// 🔥 EXISTING LOGIC (keep)
-if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;
-else if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;
-else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;
-else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;
+  if (best?.url) streamUrl = best.url;
+}
 
-// 🔥 NEW: direct HLS
-else if (sources?.hls?.url) streamUrl = sources.hls.url;
-else if (sources?.hls?.src) streamUrl = sources.hls.src;
+// existing logic
+else if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;  
+else if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;  
+else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;  
+else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;  
 
-// 🔥 NEW: streams array (THIS FIXES YOUR BUG)
+// 🔥 NEW: direct hls
+else if (sources?.hls?.url) streamUrl = sources.hls.url;  
+else if (sources?.hls?.src) streamUrl = sources.hls.src;  
+
+// 🔥 NEW: streams array fallback
 else if (json?.streams?.length) {
   const best =
     json.streams.find(s => s.resolution === '2160p') ||
@@ -464,19 +458,15 @@ else if (json?.streams?.length) {
   if (best?.url) streamUrl = best.url;
 }
 
+// normalize protocol
 if (streamUrl && streamUrl.startsWith('//')) {
   streamUrl = 'https:' + streamUrl;
-}  
+}
 
-    if (streamUrl && !streamUrl.startsWith('http')) streamUrl = null;  
-    if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');  
+// safety cleanup
+if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');
 
-    const tags = json?.videoTagsListProps?.tags?.map(t => t.name).slice(0, 20) || [];  
-
-    if (!streamUrl) {
-  logger.warn('xHamster: stream extraction failed');
-  logger.warn(JSON.stringify(sources, null, 2).slice(0, 1000));
-}  
+if (!streamUrl) logger.warn("xHamster: no stream URL found");  
 
     return new meta.MetaResponse(  
       id,  
