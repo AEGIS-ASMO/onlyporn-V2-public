@@ -444,12 +444,29 @@ const sources =
   json?.videoEntity?.sources ||
   {};
 
+// 🔥 EXISTING LOGIC (keep)
 if (sources?.hls?.av1?.url) streamUrl = sources.hls.av1.url;
 else if (sources?.hls?.h264?.url) streamUrl = sources.hls.h264.url;
 else if (sources?.mp4?.high?.url) streamUrl = sources.mp4.high.url;
 else if (sources?.mp4?.medium?.url) streamUrl = sources.mp4.medium.url;
+
+// 🔥 NEW: direct HLS
 else if (sources?.hls?.url) streamUrl = sources.hls.url;
-else if (sources?.hls?.src) streamUrl = sources.hls.src;  
+else if (sources?.hls?.src) streamUrl = sources.hls.src;
+
+// 🔥 NEW: streams array (THIS FIXES YOUR BUG)
+else if (json?.streams?.length) {
+  const best =
+    json.streams.find(s => s.resolution === '2160p') ||
+    json.streams.find(s => s.resolution === '1080p') ||
+    json.streams[0];
+
+  if (best?.url) streamUrl = best.url;
+}
+
+if (streamUrl && streamUrl.startsWith('//')) {
+  streamUrl = 'https:' + streamUrl;
+}  
 
     if (streamUrl && !streamUrl.startsWith('http')) streamUrl = null;  
     if (streamUrl) streamUrl = streamUrl.replace(/\.\d{3,4}[ab]/g, '');  
