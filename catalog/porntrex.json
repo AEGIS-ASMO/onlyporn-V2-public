@@ -1,0 +1,49 @@
+{
+  "type": "movie",
+  "name": "OnlyPorn: Porntrex",
+  "id": "porntrex",
+  "extra": [
+    {
+      "name": "search"
+    },
+    {
+      "name": "genre",
+      "options": [
+        "Most Popular",
+        "Top Rated",
+        "4K porn",
+        "Gaping",
+        "Public",
+        "Amateur",
+        "Latina",
+        "Anal",
+        "Milf",
+        "Swallow",
+        "Creampie",
+        "Fantasy",
+        "Babe",
+        "Teen",
+        "Wife",
+        "POV",
+        "Shemale",
+        "Blowjob",
+        "Compilation",
+        "Deepthroat",
+        "Massage",
+        "Japanese",
+        "Asian",
+        "Cuckold",
+        "Hentai",
+        "Celebrities"
+      ]
+    },
+    {
+      "name": "skip"
+    }
+  ],
+  "extraSupported": [
+    "search",
+    "genre",
+    "skip"
+  ]
+}
