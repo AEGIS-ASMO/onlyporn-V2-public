@@ -177,90 +177,90 @@ keyword = keyword.toLowerCase();
   return final;
 }
 
-  getCatalogMetas(html, currentUrl) {
-    const metadataList = [];
-    const $ = load(html);
-
-    const items = $('a.thumb, a.video-item, .video-item a, a[href*="/video"]');
-
-    const seen = new Set();
-
-items.each((index, element) => {
-  const $e = $(element);
-
-  const link = $e.attr('href');
-
-  if (!link) return;
-
-  // 🔥 1. Skip pinned/top repeated videos
-  if (index < 8 && currentUrl.includes('trending')) return;
-
-  // 🔥 2. Local dedupe (same page)
-  if (seen.has(link)) return;
-  seen.add(link);
-
-      const img = $e.find('img');
-
-      let poster =
-  img.attr('data-src') ||
-  img.attr('data-original') ||
-  img.attr('src') ||
-  img.attr('data-preview');
-
-      if (poster) {
-        poster = poster
-          .replace('/small/', '/large/')
-          .replace('/medium/', '/large/')
-          .replace('/thumbs/', '/thumbs/large/');
-
-        if (/\/large\//.test(poster)) {
-          poster = poster.replace('/large/', '/large_hd/');
-        }
-      }
-
-      const title =
-  img.attr('alt') ||
-  $e.attr('title') ||
-  $e.find('.n').text() ||
-  $e.text().trim();
-
-      if (!link || !title) return;
-
-      const videoPageUrl = this.baseUrl + link;
-
-const is4kCategory = currentUrl.includes('q=uhd');
-
-// 🚫 Skip pinned fake entries EARLY for 4K pages
-if (is4kCategory) {
-  const text = $e.text().toLowerCase();
-  const titleCheck = (title || '').toLowerCase();
-
-  const looks4k =
-    /4k|2160/.test(text) ||
-    /4k|2160/.test(titleCheck) ||
-    /uhd/.test(text);
-
-  if (!looks4k) {
-    return; // ❌ skip immediately
-  }
-}
-
-// 🔥 ADD THIS
-const uniqueId = `${currentUrl}::${link}::${index}`;
-
-metadataList.push(
-  new meta.MetaPreview(
-    uniqueId,
-    'movie',
-    title,
-    poster,
-    { videoPageUrl, is4kCategory } // ✅ pass flag
-  ),
-);
-    });
-
-    logger.debug({ count: metadataList.length }, 'catalog items parsed');
-    return metadataList;
+  getCatalogMetas(html, currentUrl) {    
+    const metadataList = [];    
+    const $ = load(html);    
+    
+    const items = $('a.thumb, a.video-item, .video-item a, a[href*="/video"]');    
+    
+    const seen = new Set();    
+    
+items.each((index, element) => {    
+  const $e = $(element);    
+    
+  const link = $e.attr('href');    
+    
+  if (!link) return;    
+    
+  // 🔥 1. Skip pinned/top repeated videos    
+  if (index < 8 && currentUrl.includes('trending')) return;    
+    
+  // 🔥 2. Local dedupe (same page)    
+  if (seen.has(link)) return;    
+  seen.add(link);    
+    
+      const img = $e.find('img');    
+    
+      let poster =    
+  img.attr('data-src') ||    
+  img.attr('data-original') ||    
+  img.attr('src') ||    
+  img.attr('data-preview');    
+    
+      if (poster) {    
+        poster = poster    
+          .replace('/small/', '/large/')    
+          .replace('/medium/', '/large/')    
+          .replace('/thumbs/', '/thumbs/large/');    
+    
+        if (/\/large\//.test(poster)) {    
+          poster = poster.replace('/large/', '/large_hd/');    
+        }    
+      }    
+    
+      const title =    
+  img.attr('alt') ||    
+  $e.attr('title') ||    
+  $e.find('.n').text() ||    
+  $e.text().trim();    
+    
+      if (!link || !title) return;    
+    
+      const videoPageUrl = this.baseUrl + link;    
+    
+const is4kCategory = currentUrl.includes('q=uhd');    
+    
+// 🚫 Skip pinned fake entries EARLY for 4K pages    
+if (is4kCategory) {    
+  const text = $e.text().toLowerCase();    
+  const titleCheck = (title || '').toLowerCase();    
+    
+  const looks4k =    
+    /4k|2160/.test(text) ||    
+    /4k|2160/.test(titleCheck) ||    
+    /uhd/.test(text);    
+    
+  if (!looks4k) {    
+    return; // ❌ skip immediately    
+  }    
+}    
+    
+// 🔥 ADD THIS    
+const uniqueId = `${currentUrl}::${link}::${index}`;    
+    
+metadataList.push(    
+  new meta.MetaPreview(    
+    uniqueId,    
+    'movie',    
+    title,    
+    poster,    
+    { videoPageUrl, is4kCategory } // ✅ pass flag    
+  ),    
+);    
+    });    
+    
+    logger.debug({ count: metadataList.length }, 'catalog items parsed');    
+    return metadataList;    
   }
 
   async getMetadata(args) {
@@ -271,7 +271,8 @@ metadataList.push(
   const parts = id.split('::');
   const link = parts[1];
 
-  const videoPageUrl = this.baseUrl + link;
+  const cleanLink = link.split('/').slice(0, 3).join('/');
+const videoPageUrl = this.baseUrl + cleanLink + '/';
 
   return this.fetchHtml(videoPageUrl)
     .then(html => this.parseVideoPage({ id: videoPageUrl, html, is4kCategory: extra?.is4kCategory }))
