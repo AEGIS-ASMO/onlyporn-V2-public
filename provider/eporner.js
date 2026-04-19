@@ -10,7 +10,6 @@ const sortByMappings = {
   'Monthly Top': '/SORT-top-monthly/',
   'Most Viewed': '/SORT-most-viewed/',
   'Top Rated': '/SORT-top-rated/',
-  Longest: '/SORT-longest/',
 };
 
 class EpornerProvider extends Provider {
