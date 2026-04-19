@@ -2,16 +2,16 @@ const { load } = require('cheerio');
 const logger = require('../logger');    
 const { meta } = require('../model');    
 const Provider = require('./provider');  
-  
+
 const DEFAULT_POSTER =  
   'https://thumb-cdn77.xvideos-cdn.com/default.jpg';  
-  
+
 const cleanTitle = (title = '') =>  
   title  
     .replace(/^xvideos\s*video\s*/i, '')  
     .replace(/^xvideos\s*/i, '')  
     .trim();  
-  
+
 const normalizeUrl = (url) => {
   if (!url || typeof url !== 'string') return undefined;
 
@@ -31,18 +31,18 @@ const resolvePoster = (url) => {
   url = normalizeUrl(url);
   if (!url) return DEFAULT_POSTER;
 
-  
+
 
   return url;
 };
 
-  
-  
+
+
 /* =========================    
    🔥 ADDED CACHE    
 ========================= */    
 const htmlCache = new Map();    
-  
+
 const inFlight = new Map(); // ✅ FIX (missing before)    
 const HTML_TTL = 1000 * 60 * 5; // 5 min
 
@@ -58,35 +58,35 @@ const REGEX = {
   thumbCdn: /(https:\/\/thumb-cdn\d+\.xvideos-cdn\.com\/[^'"]+xv_\d+_p\.avif)/,
   thumbSlide: /(https:\/\/thumb(?:-cdn\d+)?\.xvideos-cdn\.com\/[^'"]+xv_\d+_t\.jpg)/
 };    
-  
+
 class XvideosProvider extends Provider {    
-  
+
   constructor() {    
     super('https://www.xvideos.com', 'xvideos', 50);    
   }    
-  
+
   static create() {    
     return new XvideosProvider();    
   }    
-  
+
   async fetchHtml(url) {    
-  
+
     const cached = htmlCache.get(url);    
     if (cached && (Date.now() - cached.time < HTML_TTL)) {    
       return cached.data;    
     }    
-  
+
     if (inFlight.has(url)) {    
       return inFlight.get(url);    
     }    
-    
-  
+
+
     const promise = (async () => {    
   try {    
-  
-  
+
+
     const html = await super.fetchHtml(url);    
-  
+
     htmlCache.set(url, { data: html, time: Date.now() });    
 if (htmlCache.size > 300) {    
   const firstKey = htmlCache.keys().next().value;    
@@ -97,69 +97,70 @@ if (htmlCache.size > 300) {
     inFlight.delete(url);    
   }    
 })();    
-  
+
     inFlight.set(url, promise);    
-  
+
     return promise;    
   }    
-  
+
   getInitialUrl() {    
     return this.baseUrl;    
   }    
-  
+
   handleSearch({ extra: { search: keyword } }) {    
     return `${this.baseUrl}/?k=${encodeURIComponent(keyword)}`;    
   }    
-  
+
   handleGenre(args) {    
     return this.handleSearch({ ...args, extra: { search: args.extra.genre } });    
   }    
-  
-  handlePagination(url, { extra: { skip, search } }) {
 
-  const page = Math.floor(skip / 48); // homepage ~48 items
+  handlePagination(url, { extra: { skip } }) {
+  const page = Math.floor(skip / 48);
 
-  // ✅ SEARCH → use ?p=
-  if (search) {
-    const prefix = url.includes('?') ? '&' : '?';
-    return `${url}${prefix}p=${page}`;
+  const u = new URL(url);
+
+  // ✅ SEARCH / GENRE (detect via ?k=)
+  if (u.searchParams.has('k')) {
+    u.searchParams.set('p', page);
+    return u.toString();
   }
 
-  // ✅ DEFAULT HOMEPAGE → use /new/
+  // ✅ HOMEPAGE
   if (url === this.baseUrl || url === `${this.baseUrl}/`) {
     return page === 0
       ? this.baseUrl
       : `${this.baseUrl}/new/${page}`;
   }
 
-  // ✅ OTHER CASES (fallback)
+  // ✅ FALLBACK (safety)
   return `${this.baseUrl}/new/${page}`;
 }    
-  
+
    getCatalogMetas(html) {  
   const $ = load(html);  
   const metadatas = [];  
   const seen = new Set();  
-  
+
   $('div.thumb-block a').each((_, el) => {  
     const href = $(el).attr('href');  
     if (!href || !href.startsWith('/video')) return;  
-  
+
     let id = new URL(href, this.baseUrl).href;  
-  
+
 id = id  
   .split('?')[0]  
   .replace(/\/THUMBNUM.*/, '')  
   .replace(/\/$/, '');  
-  
+
     if (seen.has(id)) return;  
     seen.add(id); 
 
 const parent = $(el).closest('div.thumb-block');
 const img = parent.find('img').first();
 const titleAnchor = parent.find('.thumb-under p > a'); 
-      
-  
+
+
     let thumb =
   img.attr('data-thumb_url169') ||
   img.attr('data-thumb_url') ||
@@ -205,8 +206,8 @@ if (!thumb) {
   }
 }
 
-  
-  
+
+
 
 let titleRaw =
   $(el).attr('title') ||
@@ -214,7 +215,7 @@ let titleRaw =
   titleAnchor.attr('title') ||
   titleAnchor.text() ||
   'Video';  
-  
+
     metadatas.push(  
       new meta.MetaPreview(  
         id,  
@@ -224,10 +225,10 @@ let titleRaw =
       )  
     );  
   });  
-  
+
   return metadatas;  
 }    
-  
+
   async getMetadata(args) {
   const cached = metaCache.get(args.id);
   if (cached && (Date.now() - cached.time < META_TTL)) {
@@ -249,24 +250,24 @@ if (metaCache.size > 300) {
 
   return parsed.metaResponse;
 }    
-  
+
   parseVideoPage({ id, html }) {
 
 const $ = load(html);  
-  
-    
-  
-  
-  
+
+
+
+
+
 let jsonContentUrl = null;  
-  
+
 try {  
   const json = JSON.parse(  
     $('script[type="application/ld+json"]').first().text()  
   );  
   jsonContentUrl = json?.contentUrl || null;  
 } catch (e) {}  
-  
+
 const videoMatch =
   html.match(REGEX.videoHLS) ||
   html.match(REGEX.videoHigh) ||
@@ -274,15 +275,15 @@ const videoMatch =
 
 
 const videoPageUrl = videoMatch ? videoMatch[1] : null;  
-  
+
 const isBroken =
   !videoPageUrl &&
   !jsonContentUrl &&
   !html.includes('html5player');  
-  
+
 if (isBroken) {  
   logger.warn('Invalid video page (real failure)');  
-  
+
   return {  
     metaResponse: new meta.MetaResponse(  
       id,  
@@ -299,14 +300,14 @@ if (isBroken) {
     videoPageUrl: null  
   };  
 }  
-  
+
   /* =========================  
      TAGS / LINKS  
   ========================= */  
   const links = [];  
   $('div.video-tags > a').each((i, e) => {  
     const $tag = $(e);  
-  
+
     links.push(  
       new meta.MetaLink(  
         $tag.text(),  
@@ -315,11 +316,11 @@ if (isBroken) {
       )  
     );  
   });    
-  
-    
-  
-    
-  
+
+
+
+
+
   /* =========================  
      META TAGS  
   ========================= */  
@@ -327,7 +328,7 @@ if (isBroken) {
 const description = $('meta[name="description"]').attr('content');
 const ogImage = $('meta[property="og:image"]').attr('content');
 const keywords = $('meta[name="keywords"]').attr('content');  
-  
+
   const thumbMatch =
   html.match(REGEX.thumb169) ||
   html.match(REGEX.thumbCdn) ||
@@ -336,19 +337,19 @@ const keywords = $('meta[name="keywords"]').attr('content');
 let background = resolvePoster(
   thumbMatch?.[1] || ogImage
 );  
-  
-  
+
+
   let poster = background;
-  
-  
+
+
   /* =========================  
      GENRES  
   ========================= */  
   const genres = keywords
   ? keywords.split(',').map(g => g.trim())
   : [];  
-  
-  
+
+
   /* =========================  
      META RESPONSE  
   ========================= */  
@@ -364,15 +365,15 @@ let background = resolvePoster(
       genres  
     }  
   );  
-  
+
   logger.debug({ videoPageUrl, poster }, 'XVideos FINAL extraction');  
-  
+
   return {  
     metaResponse,  
     videoPageUrl  
   };  
 }    
-  
+
   async processStreams({ id }) {
 
   let cached = metaCache.get(id);
@@ -393,24 +394,24 @@ let background = resolvePoster(
   logger.debug({ videoPageUrl: metaData.videoPageUrl }, 'XVideos stream source');
 
   let streamsResponse = await super.getStreams(metaData);    
-  
+
     /* =========================    
        🔥 FIX LOW QUALITY ISSUE    
     ========================= */    
     if (streamsResponse?.streams?.length) {    
-  
+
   streamsResponse.streams = streamsResponse.streams.map(s => {    
-  
+
     // ✅ SAFE RESOLUTION FALLBACK    
     const match = s.url?.match(/(\d{3,4})p/);    
 const resolution =    
   s.resolution ||    
   (match ? match[1] + 'p' : null) ||    
   'unknown';    
-  
+
     // ✅ SAFE URL BUILD (DO NOT BREAK PATH)    
     let finalUrl = s.url;    
-  
+
 if (!s.url.startsWith('http') && metaData.videoPageUrl) {    
   const base = metaData.videoPageUrl.substring(    
     0,    
@@ -418,7 +419,7 @@ if (!s.url.startsWith('http') && metaData.videoPageUrl) {
   );    
   finalUrl = base + s.url;    
 }    
-  
+
     return {    
       ...s,    
       url: finalUrl,    
@@ -426,24 +427,24 @@ if (!s.url.startsWith('http') && metaData.videoPageUrl) {
       quality: resolution    
     };    
   });    
-  
+
   // ✅ SORT PROPERLY    
   streamsResponse.streams.sort((a, b) => {    
     const getNum = (r) => parseInt(r) || 0;    
     return getNum(b.quality) - getNum(a.quality);    
   });    
-  
+
   return streamsResponse;    
 }    
-  
-        
+
+
     let streams = [];    
-  
+
     try {    
       const json = JSON.parse(    
         $('script[type="application/ld+json"]').first().text()    
       );    
-  
+
       if (json && json.contentUrl) {    
         streams.push({    
           type: 'movie',    
@@ -451,14 +452,14 @@ if (!s.url.startsWith('http') && metaData.videoPageUrl) {
           name: 'Onlyporn'    
         });    
       }    
-  
+
     } catch (e) {    
       logger.warn('ld+json parse failed');    
     }    
-  
+
     return { streams };    
   }    
-  
+
   transformStream(url, stream) {    
     return {    
       ...stream,    
@@ -468,5 +469,5 @@ if (!s.url.startsWith('http') && metaData.videoPageUrl) {
     };    
   }    
 }    
-  
+
 module.exports = XvideosProvider.create;
