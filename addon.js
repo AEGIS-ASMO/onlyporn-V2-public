@@ -13,7 +13,7 @@ const manifest = {
 
   icon: 'https://raw.githubusercontent.com/Mast3rCh1ef/addon-asset/main/op.png',
   background:
-    'https://raw.githubusercontent.com/Mast3rCh1ef/addon-asset/main/bg.png',
+    'https://cdni.pornpics.com/1280/5/188/87261714/87261714_013_3f11.jpg',
 
   resources: ['catalog', 'stream', 'meta'],
 
