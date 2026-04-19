@@ -3,9 +3,9 @@ const catalog = require('./eporner.json');
 const sortBy = [
   'Most Recent',
   'Weekly Top',
+  'Monthly Top',
   'Most Viewed',
   'Top Rated',
-  'Longest',
 ];
 
 const opt = options => ({
@@ -17,6 +17,8 @@ const genres = [
   '4k Porn',
   'HD 1080p',
   '60fps',
+  'Anal',
+  'POV',
   'Amateur',
   'Students',
   'Japanese',
@@ -25,8 +27,7 @@ const genres = [
   'Teens',
   'Family',
   'Creampie',
-  'Small Tits',
-  'Uncategorized'
+  'HQ Porn'
 ];
 
 const options = []
