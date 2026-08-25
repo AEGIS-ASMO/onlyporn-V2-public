@@ -1,6 +1,5 @@
 const shuffle = require('fisher-yates');
 const porntrexCatalog = require('./porntrex');
-const { spankbangCatalogs } = require('./spankbang');
 const xhamsterCatalogs = require('./xhamster');
 const { catalogs: epornerCatalogs } = require('./eporner');
 const xvideosCatalog = require('./xvideos.json');
@@ -12,7 +11,6 @@ function randomize(catalogs) {
 }
 
 const catalogNames = [
-  'spankbang',
   'porntrex',
   'xhamster',
   'eporner',
@@ -22,7 +20,6 @@ const catalogNames = [
 
 const catalogs = [
   ...epornerCatalogs,
-  ...spankbangCatalogs,
   ...xhamsterCatalogs,
   porntrexCatalog,
   xvideosCatalog,
