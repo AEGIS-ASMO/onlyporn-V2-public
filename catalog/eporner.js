@@ -6,11 +6,12 @@ const sortBy = [
   'Monthly Top',
   'Most Viewed',
   'Top Rated',
+  'Longest',
 ];
 
 const opt = options => ({
-  'name': 'genre',
-  options
+  name: 'genre',
+  options,
 });
 
 const genres = [
@@ -19,26 +20,32 @@ const genres = [
   '60fps',
   'Anal',
   'POV',
-  'Amateur',
-  'Students',
+  'Blowjob',
+  'Stepsister',
   'Japanese',
   'Asian Porn',
   'Big Tits',
-  'Teens',
+  'Stepmom',
   'Family',
   'Creampie',
-  'HQ Porn'
+  'HQ Porn',
 ];
 
-const options = []
+const options = [];
+
 for (const genre of genres) {
   for (const sort of sortBy) {
-    options.push(`${genre} (${sort})`);
+    options.push(
+      `${genre} (${sort})`
+    );
   }
 }
-catalog.extra.push((opt(options)));
+
+catalog.extra.push(
+  opt(options)
+);
 
 module.exports = {
   sortBy,
-  catalogs: [catalog]
+  catalogs: [catalog],
 };
